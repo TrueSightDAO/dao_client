@@ -1,0 +1,246 @@
+#!/usr/bin/env python3
+"""
+EdgarClient — Python port of dapp/scripts/edgar_payload_helper.js.
+
+Every DAO action (contribution, inventory, notarize, etc.) is an Edgar
+`submit_contribution` POST carrying a canonical payload:
+
+    [<EVENT NAME>]
+    - Label: value
+    - Label: value
+    --------
+
+    My Digital Signature: <base64 SPKI public key>
+
+    Request Transaction ID: <base64 RSASSA-PKCS1-v1_5 / SHA-256 signature>
+
+    This submission was generated using <generation source URL>
+
+    Verify submission here: https://dapp.truesight.me/verify_request.html
+
+This module centralises key generation, payload construction, signing, and the
+multipart POST so every per-module wrapper stays thin.
+"""
+from __future__ import annotations
+
+import base64
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Iterable, Mapping
+
+import requests
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
+from dotenv import load_dotenv, set_key
+
+DEFAULT_EDGAR_BASE = "https://edgar.truesight.me"
+DEFAULT_GENERATION_SOURCE = "https://dapp.truesight.me/create_signature.html"
+DEFAULT_VERIFY_URL = "https://dapp.truesight.me/verify_request.html"
+
+
+def _b64encode(data: bytes) -> str:
+    return base64.b64encode(data).decode("ascii")
+
+
+def generate_keypair() -> tuple[str, str]:
+    """Returns (public_spki_b64, private_pkcs8_b64) matching WebCrypto exportKey output."""
+    priv = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    pub_der = priv.public_key().public_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    priv_der = priv.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    return _b64encode(pub_der), _b64encode(priv_der)
+
+
+def load_private_key(private_b64: str) -> rsa.RSAPrivateKey:
+    return serialization.load_der_private_key(base64.b64decode(private_b64), password=None)
+
+
+def load_public_key(public_b64: str):
+    return serialization.load_der_public_key(base64.b64decode(public_b64))
+
+
+def format_attributes(attributes: Mapping[str, object] | Iterable[tuple[str, object]]) -> list[tuple[str, str]]:
+    if isinstance(attributes, Mapping):
+        items = list(attributes.items())
+    else:
+        items = list(attributes)
+    out: list[tuple[str, str]] = []
+    for label, raw in items:
+        if raw is None:
+            value = "N/A"
+        elif isinstance(raw, (list, tuple)):
+            value = ", ".join(str(v) for v in raw)
+        else:
+            value = str(raw)
+        out.append((str(label), value))
+    return out
+
+
+def build_payload(event_name: str, attributes: Mapping[str, object] | Iterable[tuple[str, object]]) -> str:
+    """Mirror EdgarPayloadHelper.buildPayloadString (JS)."""
+    if not event_name:
+        raise ValueError("event_name is required")
+    lines: list[str] = []
+    for label, value in format_attributes(attributes):
+        if "\n" in value:
+            value = value.replace("\r\n", "\n").replace("\n", "\n  ")
+        lines.append(f"- {label}: {value}")
+    return f"[{event_name.strip()}]\n" + "\n".join(lines) + "\n--------"
+
+
+def sign_payload(private_key: rsa.RSAPrivateKey, payload: str) -> str:
+    sig = private_key.sign(payload.encode("utf-8"), padding.PKCS1v15(), hashes.SHA256())
+    return _b64encode(sig)
+
+
+def verify_signature(public_b64: str, payload: str, request_txn_id: str) -> bool:
+    try:
+        load_public_key(public_b64).verify(
+            base64.b64decode(request_txn_id),
+            payload.encode("utf-8"),
+            padding.PKCS1v15(),
+            hashes.SHA256(),
+        )
+        return True
+    except Exception:
+        return False
+
+
+def build_share_text(
+    payload: str,
+    request_txn_id: str,
+    public_key_b64: str,
+    generation_source: str,
+    verify_url: str = DEFAULT_VERIFY_URL,
+) -> str:
+    return (
+        f"{payload}\n\n"
+        f"My Digital Signature: {public_key_b64}\n\n"
+        f"Request Transaction ID: {request_txn_id}\n\n"
+        f"This submission was generated using {generation_source}\n\n"
+        f"Verify submission here: {verify_url}"
+    )
+
+
+@dataclass
+class EdgarClient:
+    email: str
+    public_key_b64: str
+    private_key_b64: str
+    generation_source: str = DEFAULT_GENERATION_SOURCE
+    base_url: str = DEFAULT_EDGAR_BASE
+    verify_url: str = DEFAULT_VERIFY_URL
+    session: requests.Session = field(default_factory=requests.Session)
+
+    # ------------------------------------------------------------------ env IO
+
+    @classmethod
+    def env_path(cls, path: Path | str | None = None) -> Path:
+        if path is not None:
+            return Path(path)
+        return Path(__file__).resolve().parent / ".env"
+
+    @classmethod
+    def from_env(
+        cls,
+        path: Path | str | None = None,
+        *,
+        generation_source: str = DEFAULT_GENERATION_SOURCE,
+        base_url: str = DEFAULT_EDGAR_BASE,
+    ) -> "EdgarClient":
+        env = cls.env_path(path)
+        load_dotenv(env)
+        email = os.getenv("EMAIL", "").strip()
+        pub = os.getenv("PUBLIC_KEY", "").strip()
+        priv = os.getenv("PRIVATE_KEY", "").strip()
+        if not email or not pub or not priv:
+            raise RuntimeError(
+                f"Missing EMAIL / PUBLIC_KEY / PRIVATE_KEY in {env}. "
+                "Run `python auth.py login --email you@example.com` to initialise."
+            )
+        return cls(
+            email=email,
+            public_key_b64=pub,
+            private_key_b64=priv,
+            generation_source=generation_source,
+            base_url=base_url,
+        )
+
+    @classmethod
+    def write_env(
+        cls,
+        email: str,
+        public_key_b64: str,
+        private_key_b64: str,
+        path: Path | str | None = None,
+    ) -> Path:
+        env = cls.env_path(path)
+        if not env.exists():
+            env.touch(mode=0o600)
+        set_key(str(env), "EMAIL", email, quote_mode="never")
+        set_key(str(env), "PUBLIC_KEY", public_key_b64, quote_mode="never")
+        set_key(str(env), "PRIVATE_KEY", private_key_b64, quote_mode="never")
+        env.chmod(0o600)
+        return env
+
+    # ------------------------------------------------------------- payload API
+
+    def sign(self, event_name: str, attributes: Mapping[str, object]) -> tuple[str, str, str]:
+        """Returns (payload, request_txn_id, share_text)."""
+        payload = build_payload(event_name, attributes)
+        request_txn_id = sign_payload(load_private_key(self.private_key_b64), payload)
+        # Self-check: the JS client skips this but it costs microseconds and catches bad inputs fast.
+        assert verify_signature(self.public_key_b64, payload, request_txn_id), "local signature verify failed"
+        share_text = build_share_text(
+            payload,
+            request_txn_id,
+            self.public_key_b64,
+            self.generation_source,
+            self.verify_url,
+        )
+        return payload, request_txn_id, share_text
+
+    # ----------------------------------------------------------- network I/O
+
+    def submit(
+        self,
+        event_name: str,
+        attributes: Mapping[str, object],
+        *,
+        timeout: float = 30.0,
+    ) -> requests.Response:
+        _, _, share_text = self.sign(event_name, attributes)
+        return self.session.post(
+            f"{self.base_url}/dao/submit_contribution",
+            files={"text": (None, share_text)},
+            timeout=timeout,
+        )
+
+    def check_signature(self, timeout: float = 20.0) -> requests.Response:
+        return self.session.get(
+            f"{self.base_url}/dao/check_digital_signature",
+            params={"signature": self.public_key_b64},
+            timeout=timeout,
+        )
+
+
+__all__ = [
+    "DEFAULT_EDGAR_BASE",
+    "DEFAULT_GENERATION_SOURCE",
+    "DEFAULT_VERIFY_URL",
+    "EdgarClient",
+    "build_payload",
+    "build_share_text",
+    "generate_keypair",
+    "load_private_key",
+    "load_public_key",
+    "sign_payload",
+    "verify_signature",
+]
