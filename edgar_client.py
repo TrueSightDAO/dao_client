@@ -231,11 +231,111 @@ class EdgarClient:
         )
 
 
+# ------------------------------------------------------------- CLI scaffolding
+
+
+def build_event_cli(
+    *,
+    event_name: str,
+    canonical_labels: list[str] | None = None,
+    dapp_page: str | None = None,
+):
+    """Returns a `main()` entry point that:
+      1. Accepts repeated `--attr "Label=Value"` args.
+      2. Also accepts each canonical label as `--snake-case-label VALUE` for ergonomics.
+      3. Loads EdgarClient from .env and submits `event_name` with the collected attributes.
+
+    Used by every file in `modules/` so each one becomes a ~6-line wrapper.
+    """
+    import argparse
+    import json
+
+    labels = list(canonical_labels or [])
+    label_to_flag = {lbl: "--" + lbl.lower().replace("(", "").replace(")", "").replace(" ", "-") for lbl in labels}
+
+    def main(argv: list[str] | None = None) -> int:
+        parser = argparse.ArgumentParser(
+            description=(
+                f"Submit [{event_name}] to Edgar. "
+                + (f"Browser equivalent: dapp.truesight.me/{dapp_page}. " if dapp_page else "")
+                + "Use --attr 'Label=Value' for any label not exposed as a dedicated flag."
+            ),
+        )
+        for lbl in labels:
+            parser.add_argument(
+                label_to_flag[lbl],
+                dest=f"canon_{lbl}",
+                default=None,
+                metavar="VALUE",
+                help=f'Sets "- {lbl}: ..." in the payload.',
+            )
+        parser.add_argument(
+            "--attr",
+            action="append",
+            default=[],
+            metavar="LABEL=VALUE",
+            help='Add any attribute not covered by a named flag. Repeatable.',
+        )
+        parser.add_argument(
+            "--generation-source",
+            default=None,
+            help='Override the "This submission was generated using ..." line.',
+        )
+        parser.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="Print the signed share text without hitting Edgar.",
+        )
+        args = parser.parse_args(argv)
+
+        # Collect in label order: first the canonical labels that got values, then --attr extras.
+        attrs: list[tuple[str, str]] = []
+        for lbl in labels:
+            val = getattr(args, f"canon_{lbl}")
+            if val is not None:
+                attrs.append((lbl, val))
+        seen = {lbl for lbl, _ in attrs}
+        for entry in args.attr:
+            if "=" not in entry:
+                parser.error(f"--attr expects LABEL=VALUE, got {entry!r}")
+            lbl, val = entry.split("=", 1)
+            lbl = lbl.strip()
+            if lbl in seen:
+                # Let --attr override the named flag if both were given.
+                attrs = [(existing_lbl, existing_val) for existing_lbl, existing_val in attrs if existing_lbl != lbl]
+            attrs.append((lbl, val))
+            seen.add(lbl)
+
+        if not attrs:
+            parser.error("At least one attribute is required (use --attr LABEL=VALUE or a named flag).")
+
+        client = EdgarClient.from_env()
+        if args.generation_source:
+            client.generation_source = args.generation_source
+
+        if args.dry_run:
+            payload, txn_id, share_text = client.sign(event_name, attrs)
+            print(share_text)
+            return 0
+
+        resp = client.submit(event_name, attrs)
+        print(f"HTTP {resp.status_code}")
+        try:
+            data = resp.json()
+            print(json.dumps(data, indent=2))
+        except ValueError:
+            print(resp.text)
+        return 0 if resp.ok else 1
+
+    return main
+
+
 __all__ = [
     "DEFAULT_EDGAR_BASE",
     "DEFAULT_GENERATION_SOURCE",
     "DEFAULT_VERIFY_URL",
     "EdgarClient",
+    "build_event_cli",
     "build_payload",
     "build_share_text",
     "generate_keypair",
