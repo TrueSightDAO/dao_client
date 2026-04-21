@@ -1,0 +1,76 @@
+# dao_client
+
+Python client library + CLI for **TrueSight DAO**'s contribution server, **Edgar**.
+
+Every public DAO action (contribution, inventory movement, notarization, QR update, etc.) is submitted as an **RSA-signed event payload** to Edgar's `POST /dao/submit_contribution` endpoint. The browser-side reference implementation lives in [`TrueSightDAO/dapp`](https://github.com/TrueSightDAO/dapp) (each HTML page under `dapp.truesight.me/`). This repo is the **terminal / script / automation** equivalent: the same signing, the same payload shape, the same endpoint — just from Python instead of a browser tab.
+
+## What's in this repo
+
+| Path | Purpose |
+|------|---------|
+| [`edgar_client.py`](edgar_client.py) | Core library. Key generation (RSA-2048, SPKI/PKCS#8 base64 to match WebCrypto), canonical payload formatting, RSASSA-PKCS1-v1_5 / SHA-256 signing, and the multipart POST to Edgar. Python port of `dapp/scripts/edgar_payload_helper.js`. |
+| [`auth.py`](auth.py) | CLI for onboarding this machine's keypair. `login` runs a full **OAuth-loopback-style** flow: sign `[EMAIL REGISTERED EVENT]` with a `127.0.0.1` callback URL, spin up a one-shot listener, wait for the email click, capture `vk`+`em`, sign `[EMAIL VERIFICATION EVENT]`, POST. `verify` is the manual fallback. `status` / `rotate` round out the lifecycle. |
+| [`dapp_digital_signature_onboarding/`](dapp_digital_signature_onboarding/) | Read-mostly operator demo that mirrors Edgar's own Google-Sheets side of the flow (append `VERIFYING` row, flip to `ACTIVE`, call the verification-email web app). Previously hosted in [`TrueSightDAO/tokenomics`](https://github.com/TrueSightDAO/tokenomics). |
+| `.env` | **Never committed.** Holds `EMAIL`, `PUBLIC_KEY` (SPKI base64), `PRIVATE_KEY` (PKCS#8 base64) for the active identity. Written by `auth.py` with mode `0600`. |
+
+## Quick start
+
+```bash
+cd ~/Applications/dao_client
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+python3 auth.py login --email you@example.com
+#  → generates an RSA-2048 keypair in .env
+#  → POSTs [EMAIL REGISTERED EVENT] with generation source set to
+#    http://127.0.0.1:<random-port>/verify
+#  → waits for you to click the email link (on THIS machine)
+#  → captures em+vk, signs [EMAIL VERIFICATION EVENT], POSTs, prints result
+
+python3 auth.py status          # ask Edgar what it knows about this key
+python3 auth.py rotate --email you@example.com   # wipe .env keys and start over
+python3 auth.py verify --vk <value-from-email-url>   # manual fallback if you click on a different device
+```
+
+## How the loopback auth flow works
+
+1. **`edgar_client.py`** signs an `[EMAIL REGISTERED EVENT]` payload. Every payload carries a `This submission was generated using <URL>` line.
+2. Edgar parses that URL and passes it as `return_url` to the Apps Script mail web app (`edgar_send_email_verification.gs`).
+3. The mailer embeds `return_url?em=<email>&vk=<verification key>` in the email it sends you.
+4. Because the CLI set the URL to `http://127.0.0.1:<random-port>/verify`, clicking the link hits the local listener `auth.py` spun up a moment earlier.
+5. The listener captures `em` + `vk`, hands them to `edgar_client.submit("EMAIL VERIFICATION EVENT", ...)`, which signs the verification payload with the **same** keypair and POSTs it to Edgar.
+6. Edgar flips the **Contributors Digital Signatures** row from `VERIFYING` → `ACTIVE` and stamps column **H** (Verification Key Consumed). See the [sheet-flow demo](dapp_digital_signature_onboarding/) and [tokenomics SCHEMA.md](https://github.com/TrueSightDAO/tokenomics/blob/main/SCHEMA.md) for the column contract.
+
+### Constraints worth knowing
+
+- **Click the email link on the same machine** that ran `auth.py login`. Loopback ports don't leave `127.0.0.1`. For a different device, use `python3 auth.py verify --vk <value>` and paste the `vk` from the email URL.
+- Your mail client may warn that the `http://127.0.0.1:…` link is "unsafe". That's expected — it's a local URL, not a secure webpage.
+- The DAO allows **multiple simultaneously-active keys per contributor**, so running `auth.py login` on another machine (or after `rotate`) adds a new key without invalidating prior ones.
+
+## Using `edgar_client.py` from your own scripts
+
+Every additional DAO event is a three-line call:
+
+```python
+from edgar_client import EdgarClient
+
+client = EdgarClient.from_env()
+resp = client.submit(
+    "CONTRIBUTION EVENT",
+    {
+        "Type": "Time (Minutes)",
+        "Amount": "30",
+        "Description": "Closing out Townhall",
+        "Contributor(s)": "Gary Teh",
+    },
+)
+print(resp.status_code, resp.text)
+```
+
+Attribute names and event strings mirror what the corresponding `dapp/*.html` page emits — read that file as the contract.
+
+## Related repos
+
+- [`TrueSightDAO/dapp`](https://github.com/TrueSightDAO/dapp) — the browser-side reference implementation (each HTML page is one event).
+- [`TrueSightDAO/sentiment_importer`](https://github.com/TrueSightDAO/sentiment_importer) — Edgar itself (Rails). The signature-verify + sheet-write logic lives in `app/services/dao_email_registration_service.rb` and `app/models/gdrive/contributors_digital_signatures.rb`.
+- [`TrueSightDAO/tokenomics`](https://github.com/TrueSightDAO/tokenomics) — canonical schema (`SCHEMA.md`) and the Apps Script web app that sends the verification email (`google_app_scripts/tdg_identity_management/edgar_send_email_verification.gs`).
