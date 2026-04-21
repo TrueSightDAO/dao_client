@@ -47,6 +47,40 @@ python3 auth.py verify --vk <value-from-email-url>   # manual fallback if you cl
 - Your mail client may warn that the `http://127.0.0.1:…` link is "unsafe". That's expected — it's a local URL, not a secure webpage.
 - The DAO allows **multiple simultaneously-active keys per contributor**, so running `auth.py login` on another machine (or after `rotate`) adds a new key without invalidating prior ones.
 
+## Per-event CLI modules (`modules/`)
+
+Every signed-event page on `dapp.truesight.me/` has a matching script under `modules/`. Each one hardcodes the event name, exposes canonical attributes as named CLI flags, and accepts `--attr 'Label=Value'` for anything not covered. All modules support `--dry-run` to print the signed share text without hitting Edgar.
+
+Run any module from the repo root:
+
+```bash
+python3 modules/report_contribution.py \
+    --type "Time (Minutes)" --amount 30 \
+    --description "Closing out Townhall" \
+    --contributors "Gary Teh" \
+    --tdg-issued 50.00
+```
+
+| Module | Event tag | Browser equivalent |
+|--------|-----------|--------------------|
+| `modules/batch_qr_generator.py` | `[BATCH QR CODE REQUEST]` | `batch_qr_generator.html` |
+| `modules/create_proposal.py` | `[PROPOSAL CREATION]` | `create_proposal.html` |
+| `modules/notarize.py` | `[NOTARIZATION EVENT]` | `notarize.html` |
+| `modules/register_farm.py` | `[FARM REGISTRATION]` | `register_farm.html` |
+| `modules/repackaging_planner.py` | `[REPACKAGING BATCH EVENT]` | `repackaging_planner.html` |
+| `modules/report_capital_injection.py` | `[CAPITAL INJECTION EVENT]` | `report_capital_injection.html` |
+| `modules/report_contribution.py` | `[CONTRIBUTION EVENT]` | `report_contribution.html` |
+| `modules/report_dao_expenses.py` | `[DAO Inventory Expense Event]` | `report_dao_expenses.html` |
+| `modules/report_inventory_movement.py` | `[INVENTORY MOVEMENT]` | `report_inventory_movement.html` |
+| `modules/report_sales.py` | `[SALES EVENT]` | `report_sales.html` |
+| `modules/report_tree_planting.py` | `[TREE PLANTING EVENT]` | `report_tree_planting.html` |
+| `modules/review_proposal.py` | `[PROPOSAL VOTE]` | `review_proposal.html` |
+| `modules/scanner.py` | `[QR CODE EVENT]` | `scanner.html` |
+| `modules/update_qr_code.py` | `[QR CODE UPDATE EVENT]` | `update_qr_code.html` |
+| `modules/withdraw_voting_rights.py` | `[VOTING RIGHTS WITHDRAWAL REQUEST]` | `withdraw_voting_rights.html` |
+
+Read the browser-equivalent HTML for the canonical attribute list and any value-format expectations (dates, coords, currency). Pages that don't emit a signed event (read-only dashboards, `stores_nearby.html`, `view_open_proposals.html`, etc.) aren't mirrored here — they'd need a different client surface.
+
 ## Using `edgar_client.py` from your own scripts
 
 Every additional DAO event is a three-line call:
