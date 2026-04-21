@@ -10,6 +10,7 @@ Every public DAO action (contribution, inventory movement, notarization, QR upda
 |------|---------|
 | [`edgar_client.py`](edgar_client.py) | Core library. Key generation (RSA-2048, SPKI/PKCS#8 base64 to match WebCrypto), canonical payload formatting, RSASSA-PKCS1-v1_5 / SHA-256 signing, and the multipart POST to Edgar. Python port of `dapp/scripts/edgar_payload_helper.js`. |
 | [`auth.py`](auth.py) | CLI for onboarding this machine's keypair. `login` runs a full **OAuth-loopback-style** flow: sign `[EMAIL REGISTERED EVENT]` with a `127.0.0.1` callback URL, spin up a one-shot listener, wait for the email click, capture `vk`+`em`, sign `[EMAIL VERIFICATION EVENT]`, POST. `verify` is the manual fallback. `status` / `rotate` round out the lifecycle. |
+| **AI agent ledger submissions** | When automation completes repo work that should appear as a **`[CONTRIBUTION EVENT]`**, use [`modules/report_ai_agent_contribution.py`](modules/report_ai_agent_contribution.py) with **at least one** `https://github.com/TrueSightDAO/.../pull/N` URL and an explicit body. Full convention: [**TrueSightDAO/agentic_ai_context** — `DAO_CLIENT_AI_AGENT_CONTRIBUTIONS.md`](https://github.com/TrueSightDAO/agentic_ai_context/blob/main/DAO_CLIENT_AI_AGENT_CONTRIBUTIONS.md). |
 | [`dapp_digital_signature_onboarding/`](dapp_digital_signature_onboarding/) | Read-mostly operator demo that mirrors Edgar's own Google-Sheets side of the flow (append `VERIFYING` row, flip to `ACTIVE`, call the verification-email web app). Previously hosted in [`TrueSightDAO/tokenomics`](https://github.com/TrueSightDAO/tokenomics). |
 | `.env` | **Never committed.** Holds `EMAIL`, `PUBLIC_KEY` (SPKI base64), `PRIVATE_KEY` (PKCS#8 base64) for the active identity. Written by `auth.py` with mode `0600`. |
 
@@ -70,6 +71,7 @@ python3 modules/report_contribution.py \
 | `modules/repackaging_planner.py` | `[REPACKAGING BATCH EVENT]` | `repackaging_planner.html` |
 | `modules/report_capital_injection.py` | `[CAPITAL INJECTION EVENT]` | `report_capital_injection.html` |
 | `modules/report_contribution.py` | `[CONTRIBUTION EVENT]` | `report_contribution.html` |
+| `modules/report_ai_agent_contribution.py` | `[CONTRIBUTION EVENT]` (AI agent — **PR URLs required**) | *Convention doc:* [`agentic_ai_context/DAO_CLIENT_AI_AGENT_CONTRIBUTIONS.md`](https://github.com/TrueSightDAO/agentic_ai_context/blob/main/DAO_CLIENT_AI_AGENT_CONTRIBUTIONS.md) |
 | `modules/report_dao_expenses.py` | `[DAO Inventory Expense Event]` | `report_dao_expenses.html` |
 | `modules/report_inventory_movement.py` | `[INVENTORY MOVEMENT]` | `report_inventory_movement.html` |
 | `modules/report_sales.py` | `[SALES EVENT]` | `report_sales.html` |
