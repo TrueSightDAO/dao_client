@@ -83,6 +83,35 @@ python3 modules/report_contribution.py \
 
 Read the browser-equivalent HTML for the canonical attribute list and any value-format expectations (dates, coords, currency). Pages that don't emit a signed event (read-only dashboards, `stores_nearby.html`, `view_open_proposals.html`, etc.) aren't mirrored here — they'd need a different client surface.
 
+## Read-side caches (`cache/`)
+
+Four wrappers over the DAO's read-only data sources. Each one has a library API and a `python3 -m cache.<name>` CLI.
+
+| Module | Source today | CLI example |
+|--------|--------------|-------------|
+| `cache.treasury` | `TrueSightDAO/treasury-cache/dao_offchain_treasury.json` (GitHub raw) | `python3 -m cache.treasury --ledger AGL4` |
+| `cache.freight` | `TrueSightDAO/agroverse-freight-audit/pointers/freight_lanes.json` (GitHub raw) | `python3 -m cache.freight --to "San Francisco"` |
+| `cache.compositions` | `TrueSightDAO/agroverse-inventory/currency-compositions/{uuid}.json` (per-UUID receipts) | `python3 -m cache.compositions --list` |
+| `cache.contributors` | GAS `assetVerify` web app (today); planned flip to `dao_members.json` on GitHub | `python3 -m cache.contributors` (looks up self from `.env`) |
+
+### Backend-swappable architecture
+
+Every cache module delegates reads to a `DataSource` in `cache/_source.py`. Three implementations ship:
+
+- `GithubRawBackend(raw_url)` — CDN-fast, auth-free, git-history audit trail. Default for the three existing JSON caches.
+- `GithubContentsBackend(contents_url)` — for directory listings that can't be enumerated over `raw.githubusercontent.com`. Rate-limited to 60/hr per IP without auth.
+- `GasBackend(exec_url, params=...)` — for GAS web apps. 45 s timeout to survive cold starts. Used today for `cache.contributors`.
+
+When a `dao_members.json` cache publisher lands under `tdg_identity_management` (follow-up), flipping `cache/contributors.py` from GAS to GitHub is a one-line change:
+
+```python
+def _default_lookup_source() -> DataSource:
+    # return GasBackend(GAS_EXEC_URL, base_params={"full": "true"})
+    return GithubRawBackend("https://raw.githubusercontent.com/TrueSightDAO/treasury-cache/main/dao_members.json")
+```
+
+Callers (`Contributors.for_self()`, `Contributors.for_public_key(pk)`, `Contributors.list_all()`) keep the same signatures.
+
 ## Using `edgar_client.py` from your own scripts
 
 Every additional DAO event is a three-line call:
