@@ -6,11 +6,29 @@ Reader for DAO member info — voting rights + contributor name lookups.
 `AKfycbygmwRbyqse…/exec` — the same one `dapp/tdg_balance.js` hits for the
 in-browser TDG balance badge. Per-public-key query; no list endpoint.
 
-**Future:** switch `DEFAULT_SOURCE` to a `GithubRawBackend` pointing at a
+**Future:** switch the default source to a `GithubRawBackend` pointing at a
 forthcoming `dao_members.json` (proposed cache under `TrueSightDAO/
 treasury-cache` or a new `contributors-cache` repo, published on every
 CONTRIBUTION EVENT + safety-net cron by `tdg_identity_management`). Callers
-stay untouched — only this file changes.
+stay untouched, but the **internal lookup path changes** — a contributor
+has 1:N active public keys (see `agentic_ai_context` memory
+`project_edgar_multiple_active_keys`), so `for_public_key(pk)` must scan
+`contributors[*].public_keys[*]` instead of relying on the GAS endpoint's
+server-side signature filter. Proposed cache shape:
+
+    {
+      "generated_at": "...", "schema_version": 1,
+      "contributors": [
+        {
+          "name": "Gary Teh",
+          "voting_rights": 955414.06,
+          "asset_per_circulated_voting_right": 0.00644,
+          "public_keys": [
+            {"public_key": "MIIB...", "status": "ACTIVE", "created_at": "...", "last_active_at": "..."}
+          ]
+        }
+      ]
+    }
 
 CLI:
     python3 -m cache.contributors                      # look up self via .env PUBLIC_KEY

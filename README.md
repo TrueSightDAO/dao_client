@@ -102,7 +102,7 @@ Every cache module delegates reads to a `DataSource` in `cache/_source.py`. Thre
 - `GithubContentsBackend(contents_url)` — for directory listings that can't be enumerated over `raw.githubusercontent.com`. Rate-limited to 60/hr per IP without auth.
 - `GasBackend(exec_url, params=...)` — for GAS web apps. 45 s timeout to survive cold starts. Used today for `cache.contributors`.
 
-When a `dao_members.json` cache publisher lands under `tdg_identity_management` (follow-up), flipping `cache/contributors.py` from GAS to GitHub is a one-line change:
+When a `dao_members.json` cache publisher lands under `tdg_identity_management` (follow-up), flipping `cache/contributors.py` to GitHub requires **two** changes, not one, because a contributor may have **multiple simultaneously-active public keys**:
 
 ```python
 def _default_lookup_source() -> DataSource:
@@ -110,7 +110,42 @@ def _default_lookup_source() -> DataSource:
     return GithubRawBackend("https://raw.githubusercontent.com/TrueSightDAO/treasury-cache/main/dao_members.json")
 ```
 
-Callers (`Contributors.for_self()`, `Contributors.for_public_key(pk)`, `Contributors.list_all()`) keep the same signatures.
+…**and** `for_public_key(pk)` must scan the cache instead of passing `?signature=` as a query param (raw GitHub files have no query handling):
+
+```python
+def for_public_key(self, pk: str) -> dict[str, Any]:
+    data = self.source.fetch()  # GAS-shape today; whole-file array tomorrow.
+    # GAS legacy shape: single record keyed on signature.
+    if isinstance(data, dict) and data.get("contributor_name") is not None:
+        return data
+    # GithubRawBackend shape: {contributors: [{name, voting_rights, public_keys: [...]}]}
+    for c in data.get("contributors") or []:
+        if any(k.get("public_key") == pk for k in c.get("public_keys") or []):
+            return c
+    return {"error": "Public key not found in cache", "public_key": pk}
+```
+
+Proposed cache shape (contributor-aggregated; voting_rights are per-person, public keys are per-device):
+
+```json
+{
+  "generated_at": "2026-04-21T…Z",
+  "schema_version": 1,
+  "contributors": [
+    {
+      "name": "Gary Teh",
+      "voting_rights": 955414.06,
+      "asset_per_circulated_voting_right": 0.00644,
+      "public_keys": [
+        {"public_key": "MIIB…", "status": "ACTIVE", "created_at": "…", "last_active_at": "…"},
+        {"public_key": "MIIC…", "status": "ACTIVE", "created_at": "…", "last_active_at": "…"}
+      ]
+    }
+  ]
+}
+```
+
+Exposed surface (`Contributors.for_self()`, `.for_public_key(pk)`, `.list_all()`) keeps identical signatures; only the internal lookup path changes.
 
 ## Using `edgar_client.py` from your own scripts
 
