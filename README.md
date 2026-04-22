@@ -156,59 +156,80 @@ Read the browser-equivalent HTML for the canonical attribute list and value-form
 
 Four wrappers over the DAO's read-only data sources. Each one has a library API and a `python3 -m cache.<name>` CLI.
 
-| Module | Source today | CLI example |
-|--------|--------------|-------------|
-| `cache.treasury` | `TrueSightDAO/treasury-cache/dao_offchain_treasury.json` (GitHub raw) — DAO off-chain inventory snapshot, regenerated on every Telegram-logged inventory movement + safety-net cron. | `python3 -m cache.treasury --ledger AGL4` |
-| `cache.freight` | `TrueSightDAO/agroverse-freight-audit/pointers/freight_lanes.json` (GitHub raw) — freight lane registry. | `python3 -m cache.freight --to "San Francisco"` |
-| `cache.compositions` | `TrueSightDAO/agroverse-inventory/currency-compositions/{uuid}.json` — per-UUID repackaging receipts (GitHub raw fetch + GitHub contents API for listing, rate-limited to 60/hr unauthenticated). | `python3 -m cache.compositions --list` |
-| `cache.contributors` | **GAS `assetVerify` web app today** (same endpoint `dapp/tdg_balance.js` hits) → planned flip to `dao_members.json` on GitHub once [`tokenomics#236`](https://github.com/TrueSightDAO/tokenomics/pull/236)'s `dao_members_cache_publisher.gs` is wired in. | `python3 -m cache.contributors` (looks up self from `.env`) |
+| Module | Source | CLI example |
+|--------|--------|-------------|
+| `cache.treasury` | [`TrueSightDAO/treasury-cache/dao_offchain_treasury.json`](https://raw.githubusercontent.com/TrueSightDAO/treasury-cache/main/dao_offchain_treasury.json) (GitHub raw) — DAO off-chain inventory snapshot, regenerated on every Telegram-logged inventory movement + safety-net cron. | `python3 -m cache.treasury --ledger AGL4` |
+| `cache.freight` | [`TrueSightDAO/agroverse-freight-audit/pointers/freight_lanes.json`](https://raw.githubusercontent.com/TrueSightDAO/agroverse-freight-audit/main/pointers/freight_lanes.json) (GitHub raw) — freight lane registry. | `python3 -m cache.freight --to "San Francisco"` |
+| `cache.compositions` | [`TrueSightDAO/agroverse-inventory/currency-compositions/{uuid}.json`](https://github.com/TrueSightDAO/agroverse-inventory/tree/main/currency-compositions) — per-UUID repackaging receipts (GitHub raw fetch + GitHub contents API for listing, rate-limited to 60/hr unauthenticated). | `python3 -m cache.compositions --list` |
+| `cache.contributors` | **GAS `assetVerify` (default) + GitHub-raw [`dao_members.json`](https://raw.githubusercontent.com/TrueSightDAO/treasury-cache/main/dao_members.json) (live)** — auto-detects shape, either works. See below. | `python3 -m cache.contributors` · `--github` · `--list` · `--totals` |
+
+### `cache.contributors` — two live backends
+
+The snapshot shipped by [`tokenomics#237`](https://github.com/TrueSightDAO/tokenomics/pull/237)'s `dao_members_cache_publisher.gs` is **live now** at `raw.githubusercontent.com/TrueSightDAO/treasury-cache/main/dao_members.json`. Refresh triggers:
+
+- [`sentiment_importer#1028`](https://github.com/TrueSightDAO/sentiment_importer/pull/1028) — Edgar enqueues `DaoMembersCacheRefreshWorker` on every successful `[EMAIL VERIFICATION EVENT]` activation. The worker GETs `?action=refresh_dao_members_cache&secret=…` on the publisher, which rebuilds the snapshot and commits to the treasury-cache repo.
+- `installDaoMembersCacheDailyTrigger()` — safety-net daily cron in the GAS. Cache self-heals if a Sidekiq enqueue drops.
+- Manual operator call: `publishDaoMembersCacheNow()` in the Apps Script editor.
+
+Snapshot shape (`schema_version: 2`, contributor-keyed because one contributor has N simultaneously-active RSA keys — see `project_edgar_multiple_active_keys` memory):
+
+```json
+{
+  "generated_at": "2026-04-22T…Z",
+  "schema_version": 2,
+  "dao_totals": {
+    "voting_rights_circulated": 2341222.10,
+    "total_assets": 15086.58,
+    "asset_per_circulated_voting_right": 0.00644,
+    "usd_provisions_for_cash_out": 32.42
+  },
+  "contributors": [
+    { "name": "Gary Teh", "voting_rights": 955414.06,
+      "public_keys": [{"public_key": "MIIB…", "status": "ACTIVE",
+                       "created_at": "…", "last_active_at": "…"}] }
+  ]
+}
+```
+
+`Contributors.for_public_key(pk)` auto-detects which shape the backend returned (GAS ships a single `{contributor_name, voting_rights, …}` dict; GitHub ships the snapshot above and we scan `contributors[*].public_keys[*]` locally) and returns an identical-shaped record either way — just with `_source: "gas" | "github_cache"` appended so callers can tell which path answered. **Default remains GAS** for zero-surprise migration; flip to GitHub explicitly via `Contributors.from_github()` or the `--github` CLI flag, or globally by editing `_default_lookup_source` in [`cache/contributors.py`](cache/contributors.py).
 
 ### Library usage
 
 ```python
 from cache.treasury import TreasuryCache
 tc = TreasuryCache.fetch()
-print(tc.totals())                              # {item_types, total_units, total_value_usd, ...}
-print(tc.manager("Gary Teh"))                   # one manager's holdings
-print(tc.for_ledger("AGL4"))                    # contents of AGL4
-print(tc.item("ceremonial-cacao-500g"))         # where a SKU lives
+print(tc.totals())                               # {item_types, total_units, total_value_usd, ...}
+print(tc.manager("Gary Teh"))                    # one manager's holdings
+print(tc.for_ledger("AGL4"))                     # contents of AGL4
+print(tc.item("ceremonial-cacao-500g"))          # where a SKU lives
 
 from cache.contributors import Contributors
-me = Contributors().for_self()                  # reads .env PUBLIC_KEY, GETs GAS
-print(me["voting_rights"])                       # 955414.06, for example
+me = Contributors().for_self()                   # default GAS backend
+print(me["voting_rights"])                        # e.g. 955414.06
+
+me_fast = Contributors.from_github().for_self()  # fast path — ~50–150ms TTFB vs 2–5s GAS cold start
+print(me_fast["_source"], me_fast["_generated_at"])
+
+roster = Contributors.from_github().list_all()   # every contributor + their public keys
+print(Contributors.from_github().dao_totals())   # DAO-wide aggregates block
 ```
 
 ### Backend-swappable architecture
 
 Every cache module delegates reads to a `DataSource` in [`cache/_source.py`](cache/_source.py). Three implementations ship:
 
-- `GithubRawBackend(raw_url)` — CDN-fast, auth-free, git-history audit trail. Default for treasury / freight / compositions.
+- `GithubRawBackend(raw_url)` — CDN-fast, auth-free, git-history audit trail. Default for treasury / freight / compositions; opt-in for contributors.
 - `GithubContentsBackend(contents_url)` — for directory listings that `raw.githubusercontent.com` can't enumerate. Rate-limited to 60 req/hr per IP unauthenticated; surfaces a readable error when throttled.
-- `GasBackend(exec_url, params=...)` — for GAS web apps. 45 s timeout so cold starts don't spuriously fail. Current default for `cache.contributors`.
+- `GasBackend(exec_url, params=...)` — for GAS web apps. 45 s timeout so cold starts don't spuriously fail. Default for `cache.contributors`.
 
-### Pending: GitHub-raw publisher for contributors
+### Downstream — dapp uses the same cache
 
-The [`tdg_identity_management`](https://github.com/TrueSightDAO/tokenomics/tree/main/google_app_scripts/tdg_identity_management) Apps Script project now ships `dao_members_cache_publisher.gs` (clasp-pushed via [tokenomics#236](https://github.com/TrueSightDAO/tokenomics/pull/236)). Once an operator sets the `CONTRIBUTORS_CACHE_GITHUB_PAT` script property, runs `publishDaoMembersCacheNow()` once, and installs the daily trigger, the flip becomes two lines in `cache/contributors.py`:
+[`TrueSightDAO/dapp`](https://github.com/TrueSightDAO/dapp) shares the same `dao_members.json` snapshot via [`scripts/dao_members_cache.js`](https://github.com/TrueSightDAO/dapp/blob/main/scripts/dao_members_cache.js):
 
-```python
-def _default_lookup_source() -> DataSource:
-    # return GasBackend(GAS_EXEC_URL, base_params={"full": "true"})
-    return GithubRawBackend("https://raw.githubusercontent.com/TrueSightDAO/treasury-cache/main/dao_members.json")
-```
+- [`tdg_balance.js`](https://github.com/TrueSightDAO/dapp/blob/main/tdg_balance.js) renders the voting-rights badge from the cache (GAS fallback on miss) — typical 20× latency win vs GAS cold start ([dapp#170](https://github.com/TrueSightDAO/dapp/pull/170)).
+- [`create_signature.html`](https://github.com/TrueSightDAO/dapp/blob/main/create_signature.html) renders "Welcome back" optimistically from the cache while Edgar's `check_digital_signature` call is in flight ([dapp#171](https://github.com/TrueSightDAO/dapp/pull/171)).
 
-…and `for_public_key(pk)` swaps its server-side filter for a client-side scan over `contributors[*].public_keys[*]`, since raw GitHub ignores query params and serves the whole file. The cache shape is:
-
-```json
-{
-  "generated_at": "…Z", "schema_version": 1,
-  "contributors": [
-    { "name": "Gary Teh", "voting_rights": 955414.06,
-      "public_keys": [{"public_key": "MIIB…", "status": "ACTIVE", "created_at": "…", "last_active_at": "…"}] }
-  ]
-}
-```
-
-Contributor-keyed because one contributor has **N simultaneously-active RSA public keys** (one per browser/device — see the `project_edgar_multiple_active_keys` memory in `agentic_ai_context`).
+So a verification landing in Edgar propagates to: Sidekiq worker → GAS publisher → GitHub raw → **both** the dapp browser badge and any Python scripts using `cache.contributors`. One snapshot, three consumers.
 
 ## AI-agent contributions — `modules/report_ai_agent_contribution.py`
 
