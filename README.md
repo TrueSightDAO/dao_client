@@ -145,11 +145,28 @@ truesight-dao-report-contribution \
 # → HTTP 200, {"status":"success","signature_verification":"success",...}
 ```
 
-### TDG Issued for `Time (Minutes)` (human effort)
+Example when the contribution is **USD-denominated** under the **1 TDG per 1 USD** rule. The DApp maps the **USD** picker to payload **`- Type: USD`** ([`dapp/report_contribution.html`](https://github.com/TrueSightDAO/dapp/blob/main/report_contribution.html)); **`Amount`** is the USD number; **`TDG Issued`** should match it (e.g. **607.00** TDG for **607.00** USD).
 
-Do **not** use `N/A` for **`TDG Issued`** when the contribution type is clock time under the standard **human-effort** rubric. The DAO scoring pipeline treats awards as **100 TDG per 1 hour** of effort (see tokenomics TDG scoring, e.g. `google_app_scripts/tdg_scoring/grok_scoring_for_telegram_and_whatsapp_logs.gs`: TDG proportional to time, e.g. **15 minutes = 25.00 TDG** via `100 * 15 / 60`). The Google Sheet **Intiatives Scoring Rubric** documents categories at a high level ([`tokenomics/SCHEMA.md` — sheet *Intiatives Scoring Rubric*](https://github.com/TrueSightDAO/tokenomics/blob/main/SCHEMA.md)); CLI submissions should **compute and pass `--tdg-issued`** so the ledger stays consistent with Telegram-scored entries.
+```bash
+truesight-dao-report-contribution \
+    --type "USD" \
+    --amount 607.00 \
+    --description "Flight tickets for DAO logistics (USD 607.00)." \
+    --contributors "Gary Teh" \
+    --tdg-issued 607.00
+```
 
-For other contribution **types** (capital, inventory, AI-agent sessions, etc.), follow the rubric line that applies to that **Type** — the AI-agent CLI defaults `Amount` / TDG to **0** by convention; see [`agentic_ai_context/DAO_CLIENT_AI_AGENT_CONTRIBUTIONS.md`](https://github.com/TrueSightDAO/agentic_ai_context/blob/main/DAO_CLIENT_AI_AGENT_CONTRIBUTIONS.md).
+### TDG Issued — match the scoring rubric (time **or** USD)
+
+Do **not** use `N/A` for **`TDG Issued`** when a numeric rubric applies. Tokenomics TDG scoring encodes two headline rules in `google_app_scripts/tdg_scoring/grok_scoring_for_telegram_and_whatsapp_logs.gs` (`checkTdgIssued`): **100 TDG per 1 hour** of human effort, and **1 TDG per 1 USD** of contribution treated as **liquidity / dollar outlay**. The sheet **Intiatives Scoring Rubric** summarizes categories ([`tokenomics/SCHEMA.md` — *Intiatives Scoring Rubric*](https://github.com/TrueSightDAO/tokenomics/blob/main/SCHEMA.md)). Pass **`--tdg-issued`** so CLI rows stay consistent with Telegram-scored lines.
+
+**Clock time (`Time (Minutes)`, human effort)**  
+Classification analogue: *100TDG For every 1 hour of human effort*. Compute TDG as **`100 * <minutes> / 60`** (e.g. 30 minutes → **50.00** TDG).
+
+**USD (dollar amount — liquidity injected / spend the rubric scores per-USD)**  
+Classification analogue: *1TDG For every 1 USD of liquidity injected*. Use **`--type "USD"`** to mirror the DApp’s USD branch (not `Time (Minutes)`). Set **`--amount`** to the **USD** number and **`--tdg-issued` to the same numeric total** — e.g. **607.00** USD outlay → **`--tdg-issued 607.00`** (Grok example in the same `checkTdgIssued` string). Proof and context still go in **`--description`** (and attachments / destination fields when applicable).
+
+**Other types** (capital injection events, inventory, AI-agent sessions, …) use the rubric line that applies to that **Type** / event. The AI-agent contribution CLI defaults `Amount` / TDG to **0** by convention; see [`agentic_ai_context/DAO_CLIENT_AI_AGENT_CONTRIBUTIONS.md`](https://github.com/TrueSightDAO/agentic_ai_context/blob/main/DAO_CLIENT_AI_AGENT_CONTRIBUTIONS.md). Capital and other dedicated events may use **`truesight-dao-report-capital-injection`** (or the matching module) instead of **`truesight-dao-report-contribution`** when that is the correct Edgar event.
 
 | Module | Console script (examples) | Event tag | Browser equivalent |
 |--------|---------------------------|-----------|--------------------|
