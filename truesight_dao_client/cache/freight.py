@@ -6,24 +6,19 @@ Registry of freight lanes (origin → destination pairs with pricing/time
 metadata). Consumed by `dapp/shipping_planner.html`. Rarely changes —
 manual / GAS publisher.
 
-    python3 -m cache.freight                                 # list every lane
-    python3 -m cache.freight --from "Altamira, Pará"         # lanes from that origin
-    python3 -m cache.freight --to "Singapore"                 # lanes to that destination
+    python -m truesight_dao_client.cache.freight                                 # list every lane
+    python -m truesight_dao_client.cache.freight --from "Altamira, Pará"         # lanes from that origin
+    python -m truesight_dao_client.cache.freight --to "Singapore"                 # lanes to that destination
 """
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from dataclasses import dataclass, field
 from typing import Any
 
-if __package__ in (None, ""):
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from cache._source import DataSource, GithubRawBackend
-else:
-    from ._source import DataSource, GithubRawBackend
+from ._source import DataSource, GithubRawBackend
 
 
 RAW_URL = "https://raw.githubusercontent.com/TrueSightDAO/agroverse-freight-audit/main/pointers/freight_lanes.json"
@@ -72,6 +67,8 @@ def _cli(argv: list[str] | None = None) -> int:
     print(json.dumps({"registry_id": fl.registry_id(), "lanes": results}, indent=2))
     return 0
 
+
+main = _cli
 
 if __name__ == "__main__":
     sys.exit(_cli())

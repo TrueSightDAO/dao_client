@@ -4,14 +4,11 @@
 Browser equivalent: dapp.truesight.me/create_proposal.html
 
 Run from the dao_client repo root:
-    python3 modules/create_proposal.py --help
+    python -m truesight_dao_client.modules.create_proposal --help
 """
-import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from edgar_client import build_event_cli
+from ..edgar_client import build_event_cli
 
 main = build_event_cli(
     event_name='PROPOSAL CREATION',

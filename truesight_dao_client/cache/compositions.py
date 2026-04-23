@@ -6,8 +6,8 @@ Per-request repackaging receipts — one JSON file per REPACKAGING BATCH EVENT.
 This is an **audit log**: you read it to verify what happened, not to decide
 what to do. Consumed by `dapp/repackaging_planner.html`.
 
-    python3 -m cache.compositions --list                              # request IDs in the repo
-    python3 -m cache.compositions --request 67c88267-b41c-4eab-…      # fetch one receipt
+    python -m truesight_dao_client.cache.compositions --list                              # request IDs in the repo
+    python -m truesight_dao_client.cache.compositions --request 67c88267-b41c-4eab-…      # fetch one receipt
 
 `--list` uses GitHub's contents API, which is rate-limited to **60 requests
 per hour per IP** unauthenticated. If you hit the limit, set `GITHUB_TOKEN`
@@ -18,16 +18,11 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from dataclasses import dataclass, field
 from typing import Any
 
-if __package__ in (None, ""):
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from cache._source import DataSource, GithubContentsBackend, GithubRawBackend
-else:
-    from ._source import DataSource, GithubContentsBackend, GithubRawBackend
+from ._source import DataSource, GithubContentsBackend, GithubRawBackend
 
 
 RAW_BASE = "https://raw.githubusercontent.com/TrueSightDAO/agroverse-inventory/main/currency-compositions"
@@ -70,6 +65,8 @@ def _cli(argv: list[str] | None = None) -> int:
     print(json.dumps(cc.fetch(args.request), indent=2))
     return 0
 
+
+main = _cli
 
 if __name__ == "__main__":
     sys.exit(_cli())

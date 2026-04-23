@@ -9,13 +9,13 @@ Every public DAO action — contribution, inventory movement, notarization, QR u
 - [What this repo gives you](#what-this-repo-gives-you)
 - [Installation](#installation)
 - [Quick start (three commands)](#quick-start-three-commands)
-- [Onboarding a key — `auth.py`](#onboarding-a-key--authpy)
+- [Onboarding a key — `truesight_dao_client.auth`](#onboarding-a-key--truesight_dao_clientauth--truesight-dao-auth)
   - [How the loopback flow works](#how-the-loopback-flow-works)
   - [Subcommands](#subcommands)
   - [Constraints & troubleshooting](#constraints--troubleshooting)
-- [Submitting signed events — `modules/`](#submitting-signed-events--modules)
-- [Reading DAO data — `cache/`](#reading-dao-data--cache)
-- [AI-agent contributions — `modules/report_ai_agent_contribution.py`](#ai-agent-contributions--modulesreport_ai_agent_contributionpy)
+- [Submitting signed events — `truesight_dao_client.modules/`](#submitting-signed-events--truesight_dao_clientmodules)
+- [Reading DAO data — `truesight_dao_client.cache/`](#reading-dao-data--truesight_dao_clientcache)
+- [AI-agent contributions — `report_ai_agent_contribution`](#ai-agent-contributions--truesight_dao_clientmodulesreport_ai_agent_contributionpy)
 - [Using the library from your own Python](#using-the-library-from-your-own-python)
 - [Environment variables (`.env`)](#environment-variables-env)
 - [Architecture — one picture](#architecture--one-picture)
@@ -24,23 +24,35 @@ Every public DAO action — contribution, inventory movement, notarization, QR u
 
 ## What this repo gives you
 
-| File | Purpose |
-|------|---------|
-| [`edgar_client.py`](edgar_client.py) | Core library. Key generation (RSA-2048, SPKI / PKCS#8 base64 — byte-identical to WebCrypto exports), canonical payload formatting, RSASSA-PKCS1-v1_5 / SHA-256 signing, the multipart `POST /dao/submit_contribution`, and `build_event_cli(...)` for zero-boilerplate per-event wrappers. Python port of [`dapp/scripts/edgar_payload_helper.js`](https://github.com/TrueSightDAO/dapp/blob/main/scripts/edgar_payload_helper.js). |
-| [`auth.py`](auth.py) | OAuth-loopback CLI to onboard this machine's keypair. `login` signs `[EMAIL REGISTERED EVENT]` with a `127.0.0.1:<port>/verify` callback, spins up a one-shot listener, captures `em`+`vk` when the email link is clicked, auto-submits `[EMAIL VERIFICATION EVENT]`. Fallbacks: `verify`, `status`, `rotate`. |
-| [`modules/`](modules) | 16 thin CLI wrappers, one per signed page on `dapp.truesight.me/`. Named flags for canonical attributes + `--attr 'Label=Value'` escape hatch + `--dry-run`. See [table](#submitting-signed-events--modules). |
-| [`cache/`](cache) | Read-side wrappers over the DAO's four public data sources (treasury snapshot, freight lanes, repackaging receipts, contributor voting rights). Each module has a library API and a `python3 -m cache.<name>` CLI. Swappable backends (`GithubRawBackend` / `GithubContentsBackend` / `GasBackend`) so GAS→GitHub flips are one-liners. |
+| Location | Purpose |
+|----------|---------|
+| [`truesight_dao_client/edgar_client.py`](truesight_dao_client/edgar_client.py) | Core library. Key generation (RSA-2048, SPKI / PKCS#8 base64 — byte-identical to WebCrypto exports), canonical payload formatting, RSASSA-PKCS1-v1_5 / SHA-256 signing, the multipart `POST /dao/submit_contribution`, and `build_event_cli(...)` for zero-boilerplate per-event wrappers. Python port of [`dapp/scripts/edgar_payload_helper.js`](https://github.com/TrueSightDAO/dapp/blob/main/scripts/edgar_payload_helper.js). |
+| [`truesight_dao_client/auth.py`](truesight_dao_client/auth.py) | OAuth-loopback CLI to onboard this machine's keypair. `login` signs `[EMAIL REGISTERED EVENT]` with a `127.0.0.1:<port>/verify` callback, spins up a one-shot listener, captures `em`+`vk` when the email link is clicked, auto-submits `[EMAIL VERIFICATION EVENT]`. Fallbacks: `verify`, `status`, `rotate`. Installed as `truesight-dao-auth`. |
+| [`truesight_dao_client/modules/`](truesight_dao_client/modules) | Thin CLI wrappers, one per signed page on `dapp.truesight.me/`. Named flags for canonical attributes + `--attr 'Label=Value'` escape hatch + `--dry-run`. See [table](#submitting-signed-events--truesight_dao_clientmodules). |
+| [`truesight_dao_client/cache/`](truesight_dao_client/cache) | Read-side wrappers over the DAO's four public data sources (treasury snapshot, freight lanes, repackaging receipts, contributor voting rights). Each module has a library API and `python -m truesight_dao_client.cache.<name>` (plus `truesight-dao-cache-*` console scripts). Swappable backends (`GithubRawBackend` / `GithubContentsBackend` / `GasBackend`) so GAS→GitHub flips are one-liners. |
 | [`dapp_digital_signature_onboarding/`](dapp_digital_signature_onboarding/) | Operator read-mostly demo mirroring Edgar's Google-Sheets side of the onboarding flow (append `VERIFYING` row, call the mailer, flip to `ACTIVE`). Previously lived in [`TrueSightDAO/tokenomics`](https://github.com/TrueSightDAO/tokenomics) under `python_scripts/examples/`. |
-| [`requirements.txt`](requirements.txt) | `cryptography`, `requests`, `python-dotenv`. |
-| `.env` | **Never committed** (0600, gitignored). Holds `EMAIL`, `PUBLIC_KEY` (SPKI base64), `PRIVATE_KEY` (PKCS#8 base64). Written by `auth.py`. |
+| [`requirements.txt`](requirements.txt) | Mirrors runtime deps from [`pyproject.toml`](pyproject.toml) for `pip install -r` workflows. |
+| [`pyproject.toml`](pyproject.toml) | **Installable package** `truesight-dao-client` (import name `truesight_dao_client`) and console entry points (`truesight-dao-auth`, per-event CLIs, cache readers). |
+| `.env` | **Never committed** (0600, gitignored). Holds `EMAIL`, `PUBLIC_KEY` (SPKI base64), `PRIVATE_KEY` (PKCS#8 base64). Written by `truesight-dao-auth login` (or `python -m truesight_dao_client.auth login`). **Looked up from the current working directory** (`./.env`) unless you pass an explicit path to `EdgarClient.from_env(path=...)`. |
+| [`auth.py`](auth.py), [`edgar_client.py`](edgar_client.py) (repo root) | Thin shims for older scripts; prefer `truesight_dao_client` imports or the `truesight-dao-*` commands after `pip install`. |
 
 ## Installation
+
+**From PyPI** (once published):
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install truesight-dao-client
+```
+
+**From a git checkout** (editable install keeps `truesight-dao-*` on your `PATH`):
 
 ```bash
 git clone git@github.com:TrueSightDAO/dao_client.git ~/Applications/dao_client
 cd ~/Applications/dao_client
 python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e .
+# or: pip install -r requirements.txt   # library only, no console scripts
 ```
 
 Python **3.10+** (uses `list[str]`-style type hints in several modules).
@@ -49,13 +61,13 @@ Python **3.10+** (uses `list[str]`-style type hints in several modules).
 
 ```bash
 # 1. Generate a keypair, register it with Edgar, finalise via email click.
-python3 auth.py login --email you@example.com
+truesight-dao-auth login --email you@example.com
 
 # 2. Confirm Edgar agrees you're active.
-python3 auth.py status
+truesight-dao-auth status
 
 # 3. Emit any signed event — e.g. log 30 min of contribution work.
-python3 modules/report_contribution.py \
+truesight-dao-report-contribution \
     --type "Time (Minutes)" --amount 30 \
     --description "Closing out Townhall" \
     --contributors "Your Name" --tdg-issued "N/A"
@@ -63,7 +75,7 @@ python3 modules/report_contribution.py \
 
 Dry-run the third command with `--dry-run` first if you want to see the signed share text without hitting the wire.
 
-## Onboarding a key — `auth.py`
+## Onboarding a key — `truesight_dao_client.auth` / `truesight-dao-auth`
 
 ### How the loopback flow works
 
@@ -95,35 +107,37 @@ Dry-run the third command with `--dry-run` first if you want to see the signed s
   └─────────────┘
 ```
 
-The generation-source URL encoded in the signed payload is the **only** thing that tells the mailer where to point the link — `auth.py` exploits that by setting it to an ephemeral `127.0.0.1` port bound a moment before the `EMAIL REGISTERED EVENT` POST. The listener captures `em`+`vk` the instant you click, signs `[EMAIL VERIFICATION EVENT]` with the **same** keypair, and POSTs it to Edgar. Column H ("Verification Key Consumed", added in [`sentiment_importer#1024`](https://github.com/TrueSightDAO/sentiment_importer/pull/1024)) enforces single-use.
+The generation-source URL encoded in the signed payload is the **only** thing that tells the mailer where to point the link — the auth CLI exploits that by setting it to an ephemeral `127.0.0.1` port bound a moment before the `EMAIL REGISTERED EVENT` POST. The listener captures `em`+`vk` the instant you click, signs `[EMAIL VERIFICATION EVENT]` with the **same** keypair, and POSTs it to Edgar. Column H ("Verification Key Consumed", added in [`sentiment_importer#1024`](https://github.com/TrueSightDAO/sentiment_importer/pull/1024)) enforces single-use.
 
 ### Subcommands
 
 ```bash
-python3 auth.py login  --email you@example.com   # loopback register+verify; default path
-python3 auth.py verify --vk <value-from-email-url>  # manual fallback if you click on a phone
-python3 auth.py status                            # GET /dao/check_digital_signature
-python3 auth.py rotate --email you@example.com    # wipe .env keys + generate fresh
+truesight-dao-auth login  --email you@example.com   # loopback register+verify; default path
+truesight-dao-auth verify --vk <value-from-email-url>  # manual fallback if you click on a phone
+truesight-dao-auth status                            # GET /dao/check_digital_signature
+truesight-dao-auth rotate --email you@example.com    # wipe .env keys + generate fresh
 ```
 
-`auth.py login` is **idempotent** — if the stored key is already `ACTIVE` on Edgar it exits with a short message. If the key is mid-verification it says so and points you at `verify` / `rotate`.
+`truesight-dao-auth login` is **idempotent** — if the stored key is already `ACTIVE` on Edgar it exits with a short message. If the key is mid-verification it says so and points you at `verify` / `rotate`.
 
 ### Constraints & troubleshooting
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | Gmail shows "preview this link" warning | Link is `http://127.0.0.1:…` (not HTTPS). | Click through — it's a local URL. |
-| Email link opens but nothing happens in terminal | You clicked on a different device, or the listener timed out (10 min default). | `python3 auth.py verify --vk <value>` (paste the `vk=` query param from the URL). |
-| `HTTP 422 … No matching pending verification row` | The vk already consumed, or the pub_key doesn't match the row the vk was minted for. | `auth.py rotate --email you@example.com` then log in again. |
+| Email link opens but nothing happens in terminal | You clicked on a different device, or the listener timed out (10 min default). | `truesight-dao-auth verify --vk <value>` (paste the `vk=` query param from the URL). |
+| `HTTP 422 … No matching pending verification row` | The vk already consumed, or the pub_key doesn't match the row the vk was minted for. | `truesight-dao-auth rotate --email you@example.com` then log in again. |
 | `HTTP 200 … email_registration.skipped=true` | This browser key is already pending/active — Edgar won't re-send. | Click the previous email, or `rotate`. |
 | `ReadTimeout` on status / contributors | GAS cold start. | Retry once; `GasBackend` default is 45 s. |
 
-## Submitting signed events — `modules/`
+## Submitting signed events — `truesight_dao_client.modules/`
 
-Every signed page on `dapp.truesight.me/` has a matching script under `modules/`. Each one hardcodes the event name, exposes canonical attributes as named CLI flags (dashes; e.g. `--type`, `--amount`), and accepts `--attr 'Label=Value'` (repeatable) for anything not covered. All modules support `--dry-run` and `--generation-source <URL>`.
+Every signed page on `dapp.truesight.me/` has a matching module under `truesight_dao_client/modules/`. Each one hardcodes the event name, exposes canonical attributes as named CLI flags (dashes; e.g. `--type`, `--amount`), and accepts `--attr 'Label=Value'` (repeatable) for anything not covered. All modules support `--dry-run` and `--generation-source <URL>`.
+
+After `pip install -e .` or `pip install truesight-dao-client`, use the `truesight-dao-*` console commands (see [`pyproject.toml`](pyproject.toml) `[project.scripts]`). You can also run `python -m truesight_dao_client.modules.<name> …`.
 
 ```bash
-python3 modules/report_contribution.py \
+truesight-dao-report-contribution \
     --type "Time (Minutes)" --amount 30 \
     --description "Closing out Townhall" \
     --contributors "Gary Teh" \
@@ -131,39 +145,39 @@ python3 modules/report_contribution.py \
 # → HTTP 200, {"status":"success","signature_verification":"success",...}
 ```
 
-| Module | Event tag | Browser equivalent |
-|--------|-----------|--------------------|
-| `modules/batch_qr_generator.py` | `[BATCH QR CODE REQUEST]` | `batch_qr_generator.html` |
-| `modules/create_proposal.py` | `[PROPOSAL CREATION]` | `create_proposal.html` |
-| `modules/notarize.py` | `[NOTARIZATION EVENT]` | `notarize.html` |
-| `modules/register_farm.py` | `[FARM REGISTRATION]` | `register_farm.html` |
-| `modules/repackaging_planner.py` | `[REPACKAGING BATCH EVENT]` | `repackaging_planner.html` |
-| `modules/report_capital_injection.py` | `[CAPITAL INJECTION EVENT]` | `report_capital_injection.html` |
-| `modules/report_contribution.py` | `[CONTRIBUTION EVENT]` | `report_contribution.html` |
-| `modules/report_ai_agent_contribution.py` | `[CONTRIBUTION EVENT]` (AI agent — **PR URLs required**) | *Convention:* [`agentic_ai_context/DAO_CLIENT_AI_AGENT_CONTRIBUTIONS.md`](https://github.com/TrueSightDAO/agentic_ai_context/blob/main/DAO_CLIENT_AI_AGENT_CONTRIBUTIONS.md) |
-| `modules/report_dao_expenses.py` | `[DAO Inventory Expense Event]` | `report_dao_expenses.html` |
-| `modules/report_inventory_movement.py` | `[INVENTORY MOVEMENT]` | `report_inventory_movement.html` |
-| `modules/report_sales.py` | `[SALES EVENT]` | `report_sales.html` |
-| `modules/report_tree_planting.py` | `[TREE PLANTING EVENT]` | `report_tree_planting.html` |
-| `modules/review_proposal.py` | `[PROPOSAL VOTE]` | `review_proposal.html` |
-| `modules/scanner.py` | `[QR CODE EVENT]` | `scanner.html` |
-| `modules/update_qr_code.py` | `[QR CODE UPDATE EVENT]` | `update_qr_code.html` |
-| `modules/withdraw_voting_rights.py` | `[VOTING RIGHTS WITHDRAWAL REQUEST]` | `withdraw_voting_rights.html` |
+| Module | Console script (examples) | Event tag | Browser equivalent |
+|--------|---------------------------|-----------|--------------------|
+| `truesight_dao_client/modules/batch_qr_generator.py` | `truesight-dao-batch-qr-generator` | `[BATCH QR CODE REQUEST]` | `batch_qr_generator.html` |
+| `truesight_dao_client/modules/create_proposal.py` | `truesight-dao-create-proposal` | `[PROPOSAL CREATION]` | `create_proposal.html` |
+| `truesight_dao_client/modules/notarize.py` | `truesight-dao-notarize` | `[NOTARIZATION EVENT]` | `notarize.html` |
+| `truesight_dao_client/modules/register_farm.py` | `truesight-dao-register-farm` | `[FARM REGISTRATION]` | `register_farm.html` |
+| `truesight_dao_client/modules/repackaging_planner.py` | `truesight-dao-repackaging-planner` | `[REPACKAGING BATCH EVENT]` | `repackaging_planner.html` |
+| `truesight_dao_client/modules/report_capital_injection.py` | `truesight-dao-report-capital-injection` | `[CAPITAL INJECTION EVENT]` | `report_capital_injection.html` |
+| `truesight_dao_client/modules/report_contribution.py` | `truesight-dao-report-contribution` | `[CONTRIBUTION EVENT]` | `report_contribution.html` |
+| `truesight_dao_client/modules/report_ai_agent_contribution.py` | `truesight-dao-report-ai-agent-contribution` | `[CONTRIBUTION EVENT]` (AI agent — **PR URLs required**) | *Convention:* [`agentic_ai_context/DAO_CLIENT_AI_AGENT_CONTRIBUTIONS.md`](https://github.com/TrueSightDAO/agentic_ai_context/blob/main/DAO_CLIENT_AI_AGENT_CONTRIBUTIONS.md) |
+| `truesight_dao_client/modules/report_dao_expenses.py` | `truesight-dao-report-dao-expenses` | `[DAO Inventory Expense Event]` | `report_dao_expenses.html` |
+| `truesight_dao_client/modules/report_inventory_movement.py` | `truesight-dao-report-inventory-movement` | `[INVENTORY MOVEMENT]` | `report_inventory_movement.html` |
+| `truesight_dao_client/modules/report_sales.py` | `truesight-dao-report-sales` | `[SALES EVENT]` | `report_sales.html` |
+| `truesight_dao_client/modules/report_tree_planting.py` | `truesight-dao-report-tree-planting` | `[TREE PLANTING EVENT]` | `report_tree_planting.html` |
+| `truesight_dao_client/modules/review_proposal.py` | `truesight-dao-review-proposal` | `[PROPOSAL VOTE]` | `review_proposal.html` |
+| `truesight_dao_client/modules/scanner.py` | `truesight-dao-scanner` | `[QR CODE EVENT]` | `scanner.html` |
+| `truesight_dao_client/modules/update_qr_code.py` | `truesight-dao-update-qr-code` | `[QR CODE UPDATE EVENT]` | `update_qr_code.html` |
+| `truesight_dao_client/modules/withdraw_voting_rights.py` | `truesight-dao-withdraw-voting-rights` | `[VOTING RIGHTS WITHDRAWAL REQUEST]` | `withdraw_voting_rights.html` |
 
 Read the browser-equivalent HTML for the canonical attribute list and value-format expectations (dates, coordinates, currency). Pages that don't emit a signed event (read-only dashboards — `index.html`, `stores_nearby.html`, `stores_by_status.html`, `store_interaction_history.html`, `submit_feedback.html`, `verify_request.html`, `view_open_proposals.html`, `restock_recommender.html`, `shipping_planner.html`) aren't mirrored here — they'd need a different client surface (GET helpers).
 
-## Reading DAO data — `cache/`
+## Reading DAO data — `truesight_dao_client.cache/`
 
-Four wrappers over the DAO's read-only data sources. Each one has a library API and a `python3 -m cache.<name>` CLI.
+Four wrappers over the DAO's read-only data sources. Each one has a library API, `python -m truesight_dao_client.cache.<name>`, and a `truesight-dao-cache-*` console script.
 
 | Module | Source | CLI example |
 |--------|--------|-------------|
-| `cache.treasury` | [`TrueSightDAO/treasury-cache/dao_offchain_treasury.json`](https://raw.githubusercontent.com/TrueSightDAO/treasury-cache/main/dao_offchain_treasury.json) (GitHub raw) — DAO off-chain inventory snapshot, regenerated on every Telegram-logged inventory movement + safety-net cron. | `python3 -m cache.treasury --ledger AGL4` |
-| `cache.freight` | [`TrueSightDAO/agroverse-freight-audit/pointers/freight_lanes.json`](https://raw.githubusercontent.com/TrueSightDAO/agroverse-freight-audit/main/pointers/freight_lanes.json) (GitHub raw) — freight lane registry. | `python3 -m cache.freight --to "San Francisco"` |
-| `cache.compositions` | [`TrueSightDAO/agroverse-inventory/currency-compositions/{uuid}.json`](https://github.com/TrueSightDAO/agroverse-inventory/tree/main/currency-compositions) — per-UUID repackaging receipts (GitHub raw fetch + GitHub contents API for listing, rate-limited to 60/hr unauthenticated). | `python3 -m cache.compositions --list` |
-| `cache.contributors` | **GAS `assetVerify` (default) + GitHub-raw [`dao_members.json`](https://raw.githubusercontent.com/TrueSightDAO/treasury-cache/main/dao_members.json) (live)** — auto-detects shape, either works. See below. | `python3 -m cache.contributors` · `--github` · `--list` · `--totals` |
+| `truesight_dao_client.cache.treasury` | [`TrueSightDAO/treasury-cache/dao_offchain_treasury.json`](https://raw.githubusercontent.com/TrueSightDAO/treasury-cache/main/dao_offchain_treasury.json) (GitHub raw) — DAO off-chain inventory snapshot, regenerated on every Telegram-logged inventory movement + safety-net cron. | `truesight-dao-cache-treasury --ledger AGL4` |
+| `truesight_dao_client.cache.freight` | [`TrueSightDAO/agroverse-freight-audit/pointers/freight_lanes.json`](https://raw.githubusercontent.com/TrueSightDAO/agroverse-freight-audit/main/pointers/freight_lanes.json) (GitHub raw) — freight lane registry. | `truesight-dao-cache-freight --to "San Francisco"` |
+| `truesight_dao_client.cache.compositions` | [`TrueSightDAO/agroverse-inventory/currency-compositions/{uuid}.json`](https://github.com/TrueSightDAO/agroverse-inventory/tree/main/currency-compositions) — per-UUID repackaging receipts (GitHub raw fetch + GitHub contents API for listing, rate-limited to 60/hr unauthenticated). | `truesight-dao-cache-compositions --list` |
+| `truesight_dao_client.cache.contributors` | **GAS `assetVerify` (default) + GitHub-raw [`dao_members.json`](https://raw.githubusercontent.com/TrueSightDAO/treasury-cache/main/dao_members.json) (live)** — auto-detects shape, either works. See below. | `truesight-dao-cache-contributors` · `--github` · `--list` · `--totals` |
 
-### `cache.contributors` — two live backends
+### `truesight_dao_client.cache.contributors` — two live backends
 
 The snapshot shipped by [`tokenomics#237`](https://github.com/TrueSightDAO/tokenomics/pull/237)'s `dao_members_cache_publisher.gs` is **live now** at `raw.githubusercontent.com/TrueSightDAO/treasury-cache/main/dao_members.json`. Refresh triggers:
 
@@ -191,19 +205,19 @@ Snapshot shape (`schema_version: 2`, contributor-keyed because one contributor h
 }
 ```
 
-`Contributors.for_public_key(pk)` auto-detects which shape the backend returned (GAS ships a single `{contributor_name, voting_rights, …}` dict; GitHub ships the snapshot above and we scan `contributors[*].public_keys[*]` locally) and returns an identical-shaped record either way — just with `_source: "gas" | "github_cache"` appended so callers can tell which path answered. **Default remains GAS** for zero-surprise migration; flip to GitHub explicitly via `Contributors.from_github()` or the `--github` CLI flag, or globally by editing `_default_lookup_source` in [`cache/contributors.py`](cache/contributors.py).
+`Contributors.for_public_key(pk)` auto-detects which shape the backend returned (GAS ships a single `{contributor_name, voting_rights, …}` dict; GitHub ships the snapshot above and we scan `contributors[*].public_keys[*]` locally) and returns an identical-shaped record either way — just with `_source: "gas" | "github_cache"` appended so callers can tell which path answered. **Default remains GAS** for zero-surprise migration; flip to GitHub explicitly via `Contributors.from_github()` or the `--github` CLI flag, or globally by editing `_default_lookup_source` in [`truesight_dao_client/cache/contributors.py`](truesight_dao_client/cache/contributors.py).
 
 ### Library usage
 
 ```python
-from cache.treasury import TreasuryCache
+from truesight_dao_client.cache.treasury import TreasuryCache
 tc = TreasuryCache.fetch()
 print(tc.totals())                               # {item_types, total_units, total_value_usd, ...}
 print(tc.manager("Gary Teh"))                    # one manager's holdings
 print(tc.for_ledger("AGL4"))                     # contents of AGL4
 print(tc.item("ceremonial-cacao-500g"))          # where a SKU lives
 
-from cache.contributors import Contributors
+from truesight_dao_client.cache.contributors import Contributors
 me = Contributors().for_self()                   # default GAS backend
 print(me["voting_rights"])                        # e.g. 955414.06
 
@@ -216,11 +230,11 @@ print(Contributors.from_github().dao_totals())   # DAO-wide aggregates block
 
 ### Backend-swappable architecture
 
-Every cache module delegates reads to a `DataSource` in [`cache/_source.py`](cache/_source.py). Three implementations ship:
+Every cache module delegates reads to a `DataSource` in [`truesight_dao_client/cache/_source.py`](truesight_dao_client/cache/_source.py). Three implementations ship:
 
 - `GithubRawBackend(raw_url)` — CDN-fast, auth-free, git-history audit trail. Default for treasury / freight / compositions; opt-in for contributors.
 - `GithubContentsBackend(contents_url)` — for directory listings that `raw.githubusercontent.com` can't enumerate. Rate-limited to 60 req/hr per IP unauthenticated; surfaces a readable error when throttled.
-- `GasBackend(exec_url, params=...)` — for GAS web apps. 45 s timeout so cold starts don't spuriously fail. Default for `cache.contributors`.
+- `GasBackend(exec_url, params=...)` — for GAS web apps. 45 s timeout so cold starts don't spuriously fail. Default for `truesight_dao_client.cache.contributors`.
 
 ### Downstream — dapp uses the same cache
 
@@ -229,9 +243,9 @@ Every cache module delegates reads to a `DataSource` in [`cache/_source.py`](cac
 - [`tdg_balance.js`](https://github.com/TrueSightDAO/dapp/blob/main/tdg_balance.js) renders the voting-rights badge from the cache (GAS fallback on miss) — typical 20× latency win vs GAS cold start ([dapp#170](https://github.com/TrueSightDAO/dapp/pull/170)).
 - [`create_signature.html`](https://github.com/TrueSightDAO/dapp/blob/main/create_signature.html) renders "Welcome back" optimistically from the cache while Edgar's `check_digital_signature` call is in flight ([dapp#171](https://github.com/TrueSightDAO/dapp/pull/171)).
 
-So a verification landing in Edgar propagates to: Sidekiq worker → GAS publisher → GitHub raw → **both** the dapp browser badge and any Python scripts using `cache.contributors`. One snapshot, three consumers.
+So a verification landing in Edgar propagates to: Sidekiq worker → GAS publisher → GitHub raw → **both** the dapp browser badge and any Python scripts using `truesight_dao_client.cache.contributors`. One snapshot, three consumers.
 
-## AI-agent contributions — `modules/report_ai_agent_contribution.py`
+## AI-agent contributions — `truesight_dao_client/modules/report_ai_agent_contribution.py`
 
 Special-cased wrapper for `[CONTRIBUTION EVENT]` submissions that record work done **by an AI agent on behalf of a contributor** (e.g. Claude Code pairing sessions). Requires at least one `https://github.com/TrueSightDAO/.../pull/N` URL and an explicit description so the ledger entry is verifiable against a merged PR.
 
@@ -242,7 +256,7 @@ Full convention, format, and review checklist: **[`agentic_ai_context/DAO_CLIENT
 Every additional DAO event is a three-line call:
 
 ```python
-from edgar_client import EdgarClient
+from truesight_dao_client import EdgarClient
 
 client = EdgarClient.from_env()
 resp = client.submit(
@@ -273,11 +287,11 @@ The attribute dict matches the `-  Label: value` lines emitted by the browser-si
 
 | Key | Purpose | Set by |
 |-----|---------|--------|
-| `EMAIL` | The email address this identity registered with (used for `EMAIL REGISTERED` + `EMAIL VERIFICATION` events). | `auth.py login / rotate` |
-| `PUBLIC_KEY` | RSA-2048 SPKI base64, no PEM headers. Byte-identical to `crypto.subtle.exportKey('spki', ...)` + `btoa`. | `auth.py login / rotate` |
-| `PRIVATE_KEY` | RSA-2048 PKCS#8 base64, no PEM headers, unencrypted. Keep this file mode `0600`. | `auth.py login / rotate` |
+| `EMAIL` | The email address this identity registered with (used for `EMAIL REGISTERED` + `EMAIL VERIFICATION` events). | `truesight-dao-auth login / rotate` |
+| `PUBLIC_KEY` | RSA-2048 SPKI base64, no PEM headers. Byte-identical to `crypto.subtle.exportKey('spki', ...)` + `btoa`. | `truesight-dao-auth login / rotate` |
+| `PRIVATE_KEY` | RSA-2048 PKCS#8 base64, no PEM headers, unencrypted. Keep this file mode `0600`. | `truesight-dao-auth login / rotate` |
 
-The `.gitignore` covers `.env`, `.env.*`, and an exception for an optional `.env.example`. If you ever commit a private key by mistake, **rotate immediately** (`auth.py rotate`) — multiple active keys per contributor are fine; old leaked keys can be marked inactive in the sheet by an operator.
+The `.gitignore` covers `.env`, `.env.*`, and an exception for an optional `.env.example`. If you ever commit a private key by mistake, **rotate immediately** (`truesight-dao-auth rotate`) — multiple active keys per contributor are fine; old leaked keys can be marked inactive in the sheet by an operator.
 
 ## Architecture — one picture
 
@@ -318,7 +332,7 @@ The `.gitignore` covers `.env`, `.env.*`, and an exception for an optional `.env
 
 ## Security notes
 
-- **Key storage.** `PRIVATE_KEY` lives in `.env` mode 0600, gitignored. Don't check it in. If a key leaks, `auth.py rotate` — Edgar allows multiple active keys so revoking an old one is an operator action on the sheet, not a hard lockout.
+- **Key storage.** `PRIVATE_KEY` lives in `.env` mode 0600, gitignored. Don't check it in. If a key leaks, `truesight-dao-auth rotate` — Edgar allows multiple active keys so revoking an old one is an operator action on the sheet, not a hard lockout.
 - **Loopback URLs.** The email verification link is `http://127.0.0.1:<port>/verify?em=…&vk=…`. Anyone with network access to your loopback interface during the 10 min window could hit it; in practice that's you + anything else running on your laptop. Not a concern on a single-user machine.
 - **Single-use verification keys.** Column H on *Contributors Digital Signatures* enforces single-use per ([`sentiment_importer#1024`](https://github.com/TrueSightDAO/sentiment_importer/pull/1024)): a second click with the same vk returns `already_consumed: true` if the same public key is signing, or a hard reject if a different key is.
 - **No secrets in signed payloads.** Everything in the signed share text is world-readable (Edgar logs it to the Telegram raw-logs sheet). Don't put API keys, sensitive notes, or internal URLs in attribute values.
