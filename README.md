@@ -145,6 +145,12 @@ truesight-dao-report-contribution \
 # → HTTP 200, {"status":"success","signature_verification":"success",...}
 ```
 
+### TDG Issued for `Time (Minutes)` (human effort)
+
+Do **not** use `N/A` for **`TDG Issued`** when the contribution type is clock time under the standard **human-effort** rubric. The DAO scoring pipeline treats awards as **100 TDG per 1 hour** of effort (see tokenomics TDG scoring, e.g. `google_app_scripts/tdg_scoring/grok_scoring_for_telegram_and_whatsapp_logs.gs`: TDG proportional to time, e.g. **15 minutes = 25.00 TDG** via `100 * 15 / 60`). The Google Sheet **Intiatives Scoring Rubric** documents categories at a high level ([`tokenomics/SCHEMA.md` — sheet *Intiatives Scoring Rubric*](https://github.com/TrueSightDAO/tokenomics/blob/main/SCHEMA.md)); CLI submissions should **compute and pass `--tdg-issued`** so the ledger stays consistent with Telegram-scored entries.
+
+For other contribution **types** (capital, inventory, AI-agent sessions, etc.), follow the rubric line that applies to that **Type** — the AI-agent CLI defaults `Amount` / TDG to **0** by convention; see [`agentic_ai_context/DAO_CLIENT_AI_AGENT_CONTRIBUTIONS.md`](https://github.com/TrueSightDAO/agentic_ai_context/blob/main/DAO_CLIENT_AI_AGENT_CONTRIBUTIONS.md).
+
 | Module | Console script (examples) | Event tag | Browser equivalent |
 |--------|---------------------------|-----------|--------------------|
 | `truesight_dao_client/modules/batch_qr_generator.py` | `truesight-dao-batch-qr-generator` | `[BATCH QR CODE REQUEST]` | `batch_qr_generator.html` |
