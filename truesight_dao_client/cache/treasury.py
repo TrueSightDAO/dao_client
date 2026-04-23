@@ -9,25 +9,20 @@ Warehouse-Manager + Inventory-Item dropdowns on the DApp.
 
 Typical shell:
 
-    python3 -m cache.treasury                                # pretty-print totals
-    python3 -m cache.treasury --manager "Gary Teh"            # what Gary holds
-    python3 -m cache.treasury --ledger AGL4                   # AGL4 ledger contents
-    python3 -m cache.treasury --item ceremonial-cacao-500g    # where this SKU lives
+    python -m truesight_dao_client.cache.treasury                                # pretty-print totals
+    python -m truesight_dao_client.cache.treasury --manager "Gary Teh"            # what Gary holds
+    python -m truesight_dao_client.cache.treasury --ledger AGL4                   # AGL4 ledger contents
+    python -m truesight_dao_client.cache.treasury --item ceremonial-cacao-500g    # where this SKU lives
 """
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from dataclasses import dataclass, field
 from typing import Any
 
-if __package__ in (None, ""):
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from cache._source import DataSource, GithubRawBackend
-else:
-    from ._source import DataSource, GithubRawBackend
+from ._source import DataSource, GithubRawBackend
 
 
 RAW_URL = "https://raw.githubusercontent.com/TrueSightDAO/treasury-cache/main/dao_offchain_treasury.json"
@@ -136,6 +131,8 @@ def _cli(argv: list[str] | None = None) -> int:
     print(json.dumps(summary, indent=2))
     return 0
 
+
+main = _cli
 
 if __name__ == "__main__":
     sys.exit(_cli())

@@ -3,15 +3,13 @@
 
 Browser equivalent: dapp.truesight.me/report_contribution.html
 
-Run from the dao_client repo root:
-    python3 modules/report_contribution.py --help
+Run:
+    python -m truesight_dao_client.modules.report_contribution --help
+    # or: truesight-dao-report-contribution --help
 """
-import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from edgar_client import build_event_cli
+from ..edgar_client import build_event_cli
 
 main = build_event_cli(
     event_name='CONTRIBUTION EVENT',

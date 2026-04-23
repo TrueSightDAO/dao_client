@@ -4,14 +4,11 @@
 Browser equivalent: dapp.truesight.me/report_dao_expenses.html
 
 Run from the dao_client repo root:
-    python3 modules/report_dao_expenses.py --help
+    python -m truesight_dao_client.modules.report_dao_expenses --help
 """
-import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from edgar_client import build_event_cli
+from ..edgar_client import build_event_cli
 
 main = build_event_cli(
     event_name='DAO Inventory Expense Event',

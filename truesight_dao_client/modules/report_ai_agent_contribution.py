@@ -5,22 +5,19 @@ Convention (full detail):
   https://github.com/TrueSightDAO/agentic_ai_context/blob/main/DAO_CLIENT_AI_AGENT_CONTRIBUTIONS.md
 
 Requires:
-  - dao_client/.env with EMAIL, PUBLIC_KEY, PRIVATE_KEY (see README / auth.py login).
+  - ``./.env`` (cwd) with EMAIL, PUBLIC_KEY, PRIVATE_KEY (see README / ``truesight-dao-auth login``).
   - At least one --pr URL under https://github.com/TrueSightDAO/ (merged or open PR).
 
-Run from repo root:
-  python3 modules/report_ai_agent_contribution.py --help
+Run:
+  python -m truesight_dao_client.modules.report_ai_agent_contribution --help
 """
 from __future__ import annotations
 
 import argparse
-import os
 import re
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from edgar_client import EdgarClient
+from ..edgar_client import EdgarClient
 
 DEFAULT_TYPE = "AI Agent (software & documentation)"
 DEFAULT_GEN = (

@@ -40,27 +40,21 @@ One contributor has N active public keys (see `agentic_ai_context` memory
 `contributors[*].public_keys[*]`.
 
 CLI:
-    python3 -m cache.contributors                      # look up self via .env PUBLIC_KEY
-    python3 -m cache.contributors --pubkey MIIB...     # look up someone else
-    python3 -m cache.contributors --list               # full roster (GitHub backend only)
-    python3 -m cache.contributors --github             # force GitHub backend even if default is GAS
+    python -m truesight_dao_client.cache.contributors                      # look up self via .env PUBLIC_KEY
+    python -m truesight_dao_client.cache.contributors --pubkey MIIB...     # look up someone else
+    python -m truesight_dao_client.cache.contributors --list               # full roster (GitHub backend only)
+    python -m truesight_dao_client.cache.contributors --github             # force GitHub backend even if default is GAS
 """
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from dataclasses import dataclass, field
 from typing import Any
 
-if __package__ in (None, ""):
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from cache._source import DataSource, GasBackend, GithubRawBackend
-    from edgar_client import EdgarClient
-else:
-    from ._source import DataSource, GasBackend, GithubRawBackend
-    from edgar_client import EdgarClient  # type: ignore[import-not-found]
+from ..edgar_client import EdgarClient
+from ._source import DataSource, GasBackend, GithubRawBackend
 
 
 # `assetVerify` GAS web app (see dapp/tdg_balance.js). `full=true` returns the
@@ -177,6 +171,8 @@ def _cli(argv: list[str] | None = None) -> int:
     print(json.dumps(record, indent=2))
     return 0
 
+
+main = _cli
 
 if __name__ == "__main__":
     sys.exit(_cli())
