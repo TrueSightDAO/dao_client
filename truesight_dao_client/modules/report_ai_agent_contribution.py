@@ -20,7 +20,6 @@ import sys
 
 from ..edgar_client import EdgarClient
 
-DEFAULT_TYPE = "AI Agent (software & documentation)"
 DEFAULT_GEN = (
     "https://github.com/TrueSightDAO/agentic_ai_context/blob/main/DAO_CLIENT_AI_AGENT_CONTRIBUTIONS.md"
 )
@@ -35,6 +34,31 @@ def _contributors_from_email(email: str) -> str:
     if "@" in email:
         return email.split("@", 1)[0].replace(".", " ").title() + f" <{email}>"
     return email or "AI Agent"
+
+
+def _compute_amount_and_tdg(
+    contribution_type: str, hours: float | None, minutes: float | None, usd: float | None
+) -> tuple[str, str]:
+    """Return (amount, tdg_issued) matching the DApp formula.
+
+    Time:
+      - Amount = total minutes (hours*60 + minutes)
+      - TDG    = total hours * 100  (rounded to 2 decimals)
+    USD:
+      - Amount = USD value
+      - TDG    = USD value
+    """
+    if contribution_type == "Time":
+        h = hours or 0
+        m = minutes or 0
+        total_minutes = int(h * 60 + m)
+        total_hours = h + m / 60.0
+        tdg = round(total_hours * 100, 2)
+        # Match DApp: whole minutes as string, TDG with 2 decimals
+        return str(total_minutes), f"{tdg:.2f}"
+    else:  # USD
+        val = usd or 0
+        return f"{val:.2f}", f"{val:.2f}"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -60,9 +84,30 @@ def main(argv: list[str] | None = None) -> int:
         metavar="URL",
         help="Repeatable. Must match https://github.com/TrueSightDAO/<repo>/pull/<n>",
     )
-    p.add_argument("--type", default=DEFAULT_TYPE, metavar="TYPE", help=f"Contribution Type (default: {DEFAULT_TYPE})")
-    p.add_argument("--amount", default="0", help='Maps to "Amount" (default 0 for non-monetary agent work).')
-    p.add_argument("--tdg-issued", default="0", dest="tdg_issued", help='Maps to "TDG Issued" (default 0).')
+    p.add_argument(
+        "--type",
+        required=True,
+        choices=["Time", "USD"],
+        help='Contribution type: "Time" (compute TDG from hours/minutes) or "USD" (TDG = USD).',
+    )
+    p.add_argument(
+        "--hours",
+        type=float,
+        default=0,
+        help='Hours contributed (used when --type Time).',
+    )
+    p.add_argument(
+        "--minutes",
+        type=float,
+        default=0,
+        help='Minutes contributed (used when --type Time).',
+    )
+    p.add_argument(
+        "--usd",
+        type=float,
+        default=0,
+        help='USD amount (used when --type USD).',
+    )
     p.add_argument(
         "--contributors",
         default=None,
@@ -96,6 +141,21 @@ def main(argv: list[str] | None = None) -> int:
         if not PR_PATTERN.match(u):
             p.error(f"Invalid --pr (must be TrueSightDAO pull URL): {u!r}")
 
+    # Validate type-specific inputs
+    if args.type == "Time":
+        if args.hours <= 0 and args.minutes <= 0:
+            p.error("--type Time requires --hours and/or --minutes > 0")
+    elif args.type == "USD":
+        if args.usd <= 0:
+            p.error("--type USD requires --usd > 0")
+
+    amount, tdg_issued = _compute_amount_and_tdg(
+        args.type, args.hours, args.minutes, args.usd
+    )
+
+    # Format Type label to match DApp
+    type_label = "Time (Minutes)" if args.type == "Time" else "USD"
+
     pr_block = "Pull requests (GitHub evidence):\n" + "\n".join(f"- {u.strip()}" for u in prs)
     description = f"{args.title.strip()}\n\n{pr_block}\n\nDetails:\n{body}"
 
@@ -105,11 +165,11 @@ def main(argv: list[str] | None = None) -> int:
     contributors = args.contributors or _contributors_from_email(client.email)
 
     attrs: list[tuple[str, str]] = [
-        ("Type", args.type),
-        ("Amount", str(args.amount)),
+        ("Type", type_label),
+        ("Amount", amount),
         ("Description", description),
         ("Contributor(s)", contributors),
-        ("TDG Issued", str(args.tdg_issued)),
+        ("TDG Issued", tdg_issued),
         ("Attached Filename", "N/A"),
         ("Destination Contribution File Location", "N/A"),
     ]
