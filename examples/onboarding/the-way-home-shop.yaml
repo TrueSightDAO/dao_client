@@ -1,0 +1,37 @@
+# Example onboarding manifest — replays The Way Home Shop (2026-04-28).
+#
+# Use this as a template for the next retail-partner onboarding. The script
+# (`python -m truesight_dao_client.modules.onboard_retail_partner`) is
+# idempotent, so re-running this manifest after the original onboarding
+# is a no-op (every step recognizes that the work is already done).
+#
+# See agentic_ai_context/RETAILER_TECHNICAL_ONBOARDING.md for the full
+# context (what the script does, what stays manual in MVP, how to verify).
+
+partner_id: the-way-home-shop
+partner_name: The Way Home Shop
+
+contact_first_name: Gergana
+email: info@thewayhomeshop.com
+address: "8437 SE Stark Street, Portland, OR 97216"
+location: "Portland, Oregon"
+
+partner_type: Consignment   # Wholesale | Consignment | Operator | Supplier | Manufacturer
+notes: "Onboarded 2026-04-28; consignment pilot via Kirsten (10 bags Oscar 2024 ceremonial cacao 200g)."
+
+opening_order:
+  source_manager: "Kirsten Ritschel"
+  inventory_item: "Ceremonial Cacao Kraft Pouch - Alibaba:269035810001023771 + 8 Ounce Package Kraft Pouch CP340992735BR | Kirsten 20260121"
+  qr_codes:
+    - 2024OSCAR_20260330_23
+    - 2024OSCAR_20260330_24
+    - 2024OSCAR_20260330_25
+    - 2024OSCAR_20260330_26
+    - 2024OSCAR_20260330_27
+    - 2024OSCAR_20260330_28
+    - 2024OSCAR_20260330_29
+    - 2024OSCAR_20260121_32
+    - 2024OSCAR_20260121_33
+    - 2024OSCAR_20260121_34
+
+run_syncs: true
