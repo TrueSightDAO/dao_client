@@ -178,6 +178,7 @@ Classification analogue: *1TDG For every 1 USD of liquidity injected*. Use **`--
 | `truesight_dao_client/modules/report_capital_injection.py` | `truesight-dao-report-capital-injection` | `[CAPITAL INJECTION EVENT]` | `report_capital_injection.html` |
 | `truesight_dao_client/modules/report_contribution.py` | `truesight-dao-report-contribution` | `[CONTRIBUTION EVENT]` | `report_contribution.html` |
 | `truesight_dao_client/modules/report_ai_agent_contribution.py` | `truesight-dao-report-ai-agent-contribution` | `[CONTRIBUTION EVENT]` (AI agent — **PR URLs required**) | *Convention:* [`agentic_ai_context/DAO_CLIENT_AI_AGENT_CONTRIBUTIONS.md`](https://github.com/TrueSightDAO/agentic_ai_context/blob/main/DAO_CLIENT_AI_AGENT_CONTRIBUTIONS.md) |
+| `truesight_dao_client/modules/report_dapp_permission_change.py` | `truesight-dao-report-dapp-permission-change` | `[DAPP PERMISSION CHANGE EVENT]` (governor-only — edits `permissions.json` on `treasury-cache`) | *Spec:* [`agentic_ai_context/DAPP_PERMISSION_CHANGE_FLOW.md`](https://github.com/TrueSightDAO/agentic_ai_context/blob/main/DAPP_PERMISSION_CHANGE_FLOW.md) |
 | `truesight_dao_client/modules/report_dao_expenses.py` | `truesight-dao-report-dao-expenses` | `[DAO Inventory Expense Event]` | `report_dao_expenses.html` |
 | `truesight_dao_client/modules/report_inventory_movement.py` | `truesight-dao-report-inventory-movement` | `[INVENTORY MOVEMENT]` | `report_inventory_movement.html` |
 | `truesight_dao_client/modules/report_sales.py` | `truesight-dao-report-sales` | `[SALES EVENT]` | `report_sales.html` |
