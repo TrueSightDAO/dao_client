@@ -61,7 +61,6 @@ from ..edgar_client import EdgarClient
 
 EVENT_NAME = "DONATION MINT EVENT"
 DEFAULT_CURRENCY = "SunMint Tree Planting Pledge - QR Code"
-DEFAULT_LEDGER_NAME = "AGL4"
 DEFAULT_QR_PREFIX = "PLEDGE"
 PROOF_URL_PATTERN = re.compile(r"^https?://(www\.)?github\.com/TrueSightDAO/", re.IGNORECASE)
 
@@ -105,11 +104,6 @@ def main(argv: list[str] | None = None) -> int:
              "GAS server-side allowlist will reject unknown values.",
     )
     parser.add_argument(
-        "--ledger-name",
-        default=DEFAULT_LEDGER_NAME,
-        help=f"Override the AGL ledger name (default: {DEFAULT_LEDGER_NAME}).",
-    )
-    parser.add_argument(
         "--qr-code",
         default=None,
         help="Override the auto-generated QR code id (advanced; rarely needed).",
@@ -147,13 +141,15 @@ def main(argv: list[str] | None = None) -> int:
     attached_filename = _basename_from_url(args.proof_url)
     cash_collected_iso = _dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
+    # Note: do NOT include `Ledger Name` / `landing_page` / `ledger` in the payload —
+    # those are server-derived from the Currencies tab in the GAS handler so a
+    # malicious or mistaken governor cannot misroute funds via spoofed values.
     attrs: list[tuple[str, str]] = [
         ("QR Code", qr_code),
         ("Currency", args.currency),
         ("Donation Amount", f"{amount:g}"),  # 25.00 → "25", 25.5 → "25.5"
         ("Donor Name", args.donor_name),
         ("Donor Email", args.donor_email),
-        ("Ledger Name", args.ledger_name),
         ("Cash collected at (UTC)", cash_collected_iso),
         ("Attached Filename", attached_filename),
         ("Destination Contribution File Location", args.proof_url),
