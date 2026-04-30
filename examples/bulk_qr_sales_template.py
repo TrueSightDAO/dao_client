@@ -42,8 +42,14 @@ GAS_QR_ENDPOINT = (
 SOLD_BY = "Kirsten Ritschel"
 CASH_COLLECTED_BY = "Kirsten Ritschel"
 OWNER_EMAIL = "kiki@kikiscocoa.com"      # adjust per transaction
-STRIPE_SESSION_ID = "cs_live_..."         # from Stripe dashboard / email
-SHIPPING_PROVIDER = "N/A"                 # "N/A" for local pickup
+
+# Payment type:
+#   - Stripe checkout:  STRIPE_SESSION_ID = "cs_live_..." (from Stripe dashboard)
+#   - Cash sale:        STRIPE_SESSION_ID = "(none)"
+#                       Do NOT use "N/A" — GAS treats it as a literal string.
+STRIPE_SESSION_ID = "cs_live_..."
+
+SHIPPING_PROVIDER = "N/A"                 # "N/A" for local pickup / hand delivery
 TRACKING_NUMBER = "N/A"                   # "N/A" for local pickup
 ATTACHED_FILENAME = "receipt.pdf"         # or "N/A" if no receipt file
 SUBMISSION_SOURCE = "dao_client/bulk_qr_sales_template.py"
@@ -52,6 +58,11 @@ SUBMISSION_SOURCE = "dao_client/bulk_qr_sales_template.py"
 PER_BAR_GROSS = 10.00                     # e.g. $10.00 per bar
 TOTAL_STRIPE_FEE = 11.03                  # total Stripe fee for the whole txn
 # PER_BAR_FEE will be computed: TOTAL_STRIPE_FEE / number_of_bars
+
+# Ledger vs physical possession note:
+#   The QR code's ledger_shortcut (e.g. agl4, agl6) tracks which ledger owns the
+#   record. The item can physically be anywhere (e.g. in your car). The manager_name
+#   tracks who manages the record, not who holds the bag.
 
 # QR discovery filters
 CONTRIBUTOR_NAME = "Kirsten Ritschel"
