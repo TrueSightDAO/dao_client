@@ -216,11 +216,33 @@ class EdgarClient:
         attributes: Mapping[str, object],
         *,
         timeout: float = 30.0,
+        attached_file_path: str | None = None,
     ) -> requests.Response:
+        """Submit a signed event to Edgar.
+
+        When ``attached_file_path`` is provided, the file bytes are sent as the
+        ``attachment`` multipart field. Edgar's controller scans the signed text
+        for a ``https://github.com/.../(blob|tree)/.../...`` URL and uploads the
+        attachment bytes to that GitHub location via the Contents API. Caller
+        is responsible for putting the destination URL into the event payload
+        (typically as ``Destination Contribution File Location: <URL>``).
+
+        This is the canonical pattern for proof-of-work attachments — dao_client
+        does **not** push directly to GitHub; Edgar holds the GitHub PAT and
+        does the upload server-side.
+        """
         _, _, share_text = self.sign(event_name, attributes)
+        files: dict[str, object] = {"text": (None, share_text)}
+        if attached_file_path:
+            import os
+            from pathlib import Path
+            p = Path(attached_file_path)
+            if not p.is_file():
+                raise FileNotFoundError(f"Attached file not found: {attached_file_path}")
+            files["attachment"] = (p.name, p.read_bytes())
         return self.session.post(
             f"{self.base_url}/dao/submit_contribution",
-            files={"text": (None, share_text)},
+            files=files,
             timeout=timeout,
         )
 
