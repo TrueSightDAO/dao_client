@@ -1,61 +1,83 @@
 #!/usr/bin/env python3
-"""Onboard a new retail partner end-to-end (MVP — ledger + inventory only).
+"""Onboard a new partner end-to-end — ledger, inventory, and discovery surfaces.
 
-Collapses the manual steps in
-``agentic_ai_context/RETAILER_TECHNICAL_ONBOARDING.md`` §3 into a single
-manifest-driven CLI invocation. Implements the **deterministic** parts of
-the onboarding sequence:
+Renamed 2026-04-30 from ``onboard_retail_partner`` and extended with a
+``--role`` flag (``retail`` | ``processing``) so the same module handles
+both retail venues (places that sell our cacao) and processing partners
+(facilities that *convert* nibs → bars / ship / store inventory). Collapses
+the manual steps in ``agentic_ai_context/RETAILER_TECHNICAL_ONBOARDING.md``
+§3 into a single manifest-driven CLI invocation:
 
-  Step 1.  Submit ``[CONTRIBUTOR ADD EVENT]`` for the retail contact, with
-           name pre-formatted as ``<First Name> - <Store Name>``.
+  Step 1.  Submit ``[CONTRIBUTOR ADD EVENT]`` for the partner contact, name
+           pre-formatted as ``<First Name> - <Partner Name>``.
   Step 2.  Set ``Contributors contact information`` col **U** (Mailing
            Address). **Does not** set col T — that flag is reserved for
            online-fulfillment managers (Gary + Kirsten only).
   Step 3.  Append ``Agroverse Partners`` row with all required fields.
+  Step 5.  Update website discovery surfaces in ``agroverse_shop_beta``:
+           * ``js/partners-data.js`` (lat/lon + description for the
+             partners-hub map and `/cacao-journeys/...` filters)
+           * ``partner_locations.json``
+           This step is skipped automatically when ``agroverse_shop`` clone
+           isn't found, with a printed reminder.
   Step 13. Submit one ``[INVENTORY MOVEMENT]`` event per opening-order
-           QR code.
+           QR code (retail role only — processing partners typically
+           receive inventory via a separate flow).
   Step 14. Run inventory + velocity syncs locally so the JSON snapshots
            in ``agroverse-inventory`` are fresh.
 
-Skipped in MVP (operator handles via Claude / manual edits + PRs):
-  Steps 4 (geocoding — manifest must include lat/lon),
-  5–10 (partner page + discovery surfaces in ``agroverse_shop``),
-  11 (photo download),
-  12 (PR creation in ``agroverse_shop``),
-  15 (PR creation in ``agroverse-inventory``).
+Still operator-handled (manual after the script finishes — printed
+checklist at the end):
+  - Step 4: geocoding (manifest must include ``lat`` / ``lon``)
+  - Steps 6–10: partner-page HTML scaffold (``partners/<slug>/index.html``),
+    hub card insert (``partners/index.html``), wholesale-list insert
+    (``wholesale/index.html``), per-journey listing (e.g.
+    ``cacao-journeys/pacific-west-coast-path/index.html``)
+  - Step 11: photo upload to ``assets/partners/headers/`` etc.
+  - Step 12 + 15: PR creation in ``agroverse_shop_beta`` and
+    ``agroverse-inventory``
 
-Why MVP scope: the *ledger* steps cause the most pain (Edgar auto-rename
-trap, col T semantics, brittle name joins). HTML/JS surface updates are
-mechanical for an AI to do correctly the first time. Future v1 fills in
-the website work.
+Why this scope: the *ledger* steps + the partners-data/locations json
+files cause the most pain when forgotten (e.g. partner page lands on the
+site but the new partner doesn't appear on the hub map — see PR #92 on
+``agroverse_shop_beta``, where Shiok Kitchen had this exact gap). HTML
+scaffolding (steps 6–10) remains operator-driven because the partner
+page narrative + photo curation is too creative for a deterministic
+template emitter. CI lint (separate follow-up) catches anything that
+slips through the automation.
 
 Idempotency: every step checks "is this already done?" before acting.
 Re-running the same manifest is safe.
 
 Usage:
     cd dao_client
-    python -m truesight_dao_client.modules.onboard_retail_partner \\
-        --manifest path/to/manifest.yaml --dry-run
-    python -m truesight_dao_client.modules.onboard_retail_partner \\
-        --manifest path/to/manifest.yaml --execute
+    python -m truesight_dao_client.modules.onboard_partner \\
+        --manifest path/to/manifest.yaml --role retail --dry-run
+    python -m truesight_dao_client.modules.onboard_partner \\
+        --manifest path/to/manifest.yaml --role processing --execute
 
 Manifest schema (YAML):
-    partner_id: the-way-home-shop          # slug; canonical key
-    partner_name: The Way Home Shop
-    contact_first_name: Gergana
-    email: info@thewayhomeshop.com
-    address: "8437 SE Stark Street, Portland, OR 97216"
-    location: "Portland, Oregon"           # used for Agroverse Partners col F
-    partner_type: Consignment              # or Wholesale / Operator / Supplier / Manufacturer
-    notes: ""                              # optional; col G
-    opening_order:                         # optional; omit to skip step 13
+    partner_id: shiok-kitchen-menlo-park       # slug; canonical key
+    partner_name: Shiok Singapore Kitchen
+    contact_first_name: Dennis
+    email: shiokkitchen@gmail.com
+    address: "625 Oak Grove Avenue, Menlo Park, CA 94025"
+    location: "Menlo Park, California"         # used for Agroverse Partners col F + journey filter
+    role: processing                            # retail | processing — overridable via CLI --role
+    partner_type: Manufacturer                  # Wholesale / Consignment / Operator / Supplier / Manufacturer
+    partner_type_label:                         # optional; narrative shown on the partner page
+       "Processing Partner — Commercial Kitchen Access (Off-Hours)"
+    lat: 37.4527                                # required for js/partners-data.js
+    lon: -122.1838                              # required for js/partners-data.js
+    description: "27-year family-run Singaporean restaurant…"   # required for partners-data.js + hub
+    notes: ""                                   # optional; col G
+    opening_order:                              # optional (retail role); omit to skip step 13
       source_manager: "Kirsten Ritschel"
       inventory_item: "<full Currency string from Agroverse QR codes col I>"
       qr_codes:
         - 2024OSCAR_20260330_23
-        - 2024OSCAR_20260330_24
-        # …
-    run_syncs: true                        # default true; runs sync_*.py if available
+    run_syncs: true                             # default true; runs sync_*.py if available
+    agroverse_shop_path: "../agroverse_shop"    # optional; defaults to ../agroverse_shop sibling
 
 Requires:
 - dao_client ``.env`` (signing identity for Edgar) — same as other modules.
@@ -117,6 +139,9 @@ class OpeningOrder:
     qr_codes: list[str] = field(default_factory=list)
 
 
+VALID_ROLES = {"retail", "processing"}
+
+
 @dataclass
 class Manifest:
     partner_id: str
@@ -126,13 +151,19 @@ class Manifest:
     address: str
     location: str
     partner_type: str = "Consignment"
+    role: str = "retail"
+    partner_type_label: str = ""  # narrative shown on the partner page; default derives from role
+    lat: float | None = None
+    lon: float | None = None
+    description: str = ""
     notes: str = ""
     opening_order: OpeningOrder | None = None
     run_syncs: bool = True
+    agroverse_shop_path: str | None = None
 
     @property
     def contributor_full_name(self) -> str:
-        """Canonical retail-partner contact name: ``<First> - <Store>``.
+        """Canonical partner contact name: ``<First> - <Partner Name>``.
 
         Pre-formatting prevents Edgar's auto-rename from breaking the
         ``Agroverse Partners.E`` ↔ ``Contributors.A`` join. See
@@ -143,6 +174,18 @@ class Manifest:
     @property
     def partner_page_url(self) -> str:
         return f"https://agroverse.shop/partners/{self.partner_id}"
+
+    @property
+    def effective_partner_type_label(self) -> str:
+        """Narrative label for the website Partner Type info-row.
+
+        Defaults are deliberately simple — operators should override
+        ``partner_type_label`` in the manifest with a more specific
+        suffix (e.g. ``"Processing Partner — Commercial Kitchen Access (Off-Hours)"``).
+        """
+        if self.partner_type_label.strip():
+            return self.partner_type_label.strip()
+        return "Processing Partner" if self.role == "processing" else "Retail Partner"
 
 
 def load_manifest(path: Path) -> Manifest:
@@ -175,6 +218,18 @@ def load_manifest(path: Path) -> Manifest:
             qr_codes=[str(q).strip() for q in oo_raw["qr_codes"] if str(q).strip()],
         )
 
+    role = (raw.get("role") or "retail").strip().lower()
+    if role not in VALID_ROLES:
+        raise SystemExit(f"role must be one of {sorted(VALID_ROLES)}; got {role!r}.")
+
+    lat = raw.get("lat")
+    lon = raw.get("lon")
+    try:
+        lat_f = float(lat) if lat is not None else None
+        lon_f = float(lon) if lon is not None else None
+    except (TypeError, ValueError):
+        raise SystemExit(f"lat/lon must be numeric if provided; got lat={lat!r} lon={lon!r}.")
+
     return Manifest(
         partner_id=str(raw["partner_id"]).strip(),
         partner_name=str(raw["partner_name"]).strip(),
@@ -183,9 +238,15 @@ def load_manifest(path: Path) -> Manifest:
         address=str(raw["address"]).strip(),
         location=str(raw["location"]).strip(),
         partner_type=ptype,
+        role=role,
+        partner_type_label=str(raw.get("partner_type_label") or "").strip(),
+        lat=lat_f,
+        lon=lon_f,
+        description=str(raw.get("description") or "").strip(),
         notes=str(raw.get("notes") or "").strip(),
         opening_order=oo,
         run_syncs=bool(raw.get("run_syncs", True)),
+        agroverse_shop_path=str(raw.get("agroverse_shop_path") or "").strip() or None,
     )
 
 
@@ -380,6 +441,94 @@ def step3_append_partners_row(manifest: Manifest, *, dry_run: bool) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Step 5: Update website discovery surfaces (js/partners-data.js + partner_locations.json)
+# ---------------------------------------------------------------------------
+
+def _resolve_agroverse_shop_path(manifest: Manifest) -> Path | None:
+    """Locate the agroverse_shop clone. Manifest override > sibling default."""
+    if manifest.agroverse_shop_path:
+        p = Path(manifest.agroverse_shop_path).expanduser().resolve()
+        return p if p.is_dir() else None
+    sibling = REPO_ROOT.parent / "agroverse_shop"
+    return sibling if sibling.is_dir() else None
+
+
+def _update_partner_locations_json(shop_path: Path, manifest: Manifest, *, dry_run: bool) -> str:
+    target = shop_path / "partner_locations.json"
+    if not target.is_file():
+        return f"  [skip] {target} not found"
+    try:
+        data = json.loads(target.read_text())
+    except json.JSONDecodeError as e:
+        return f"  [skip] {target.name}: invalid JSON ({e})"
+    if manifest.partner_id in data:
+        return f"  ✓ {target.name}: already has '{manifest.partner_id}' (idempotent skip)"
+    if dry_run:
+        return f"  (dry-run) would add '{manifest.partner_id}' to {target.name}"
+    # Insert alphabetically by slug to keep diffs clean.
+    entries = list(data.items())
+    entries.append((manifest.partner_id, {"name": manifest.partner_name, "location": manifest.location}))
+    entries.sort(key=lambda kv: kv[0])
+    target.write_text(json.dumps(dict(entries), indent=2) + "\n", encoding="utf-8")
+    return f"  ✓ wrote {target.name} with '{manifest.partner_id}'"
+
+
+def _update_partners_data_js(shop_path: Path, manifest: Manifest, *, dry_run: bool) -> str:
+    target = shop_path / "js" / "partners-data.js"
+    if not target.is_file():
+        return f"  [skip] {target} not found"
+    if manifest.lat is None or manifest.lon is None:
+        return f"  [skip] partners-data.js: manifest missing lat/lon"
+    if not manifest.description:
+        return f"  [skip] partners-data.js: manifest missing description"
+    text = target.read_text(encoding="utf-8")
+    needle = f"'{manifest.partner_id}':"
+    if needle in text:
+        return f"  ✓ partners-data.js: already has '{manifest.partner_id}' (idempotent skip)"
+    if dry_run:
+        return f"  (dry-run) would add '{manifest.partner_id}' entry to partners-data.js"
+
+    # Escape single quotes for JS string literals.
+    def js_str(s: str) -> str:
+        return s.replace("\\", "\\\\").replace("'", "\\'")
+
+    role_field = f",\n        partner_role: '{js_str(manifest.role)}'" if manifest.role != "retail" else ""
+    block = (
+        f"    '{js_str(manifest.partner_id)}': {{\n"
+        f"        name: '{js_str(manifest.partner_name)}',\n"
+        f"        slug: '{js_str(manifest.partner_id)}',\n"
+        f"        lat: {manifest.lat},\n"
+        f"        lon: {manifest.lon},\n"
+        f"        location: '{js_str(manifest.location)}',\n"
+        f"        description: '{js_str(manifest.description)}'"
+        f"{role_field}\n"
+        f"    }},\n"
+    )
+
+    # Insert just before the final `};` of the PARTNERS_DATA object.
+    closer = "\n};"
+    idx = text.rfind(closer)
+    if idx < 0:
+        return f"  [skip] partners-data.js: closing '\\n}};' not found"
+    new_text = text[:idx] + "\n" + block.rstrip("\n") + text[idx:]
+    target.write_text(new_text, encoding="utf-8")
+    return f"  ✓ wrote partners-data.js with '{manifest.partner_id}'"
+
+
+def step5_update_listings(manifest: Manifest, *, dry_run: bool) -> None:
+    print("\n=== Step 5 — Website discovery surfaces (partner_locations.json + js/partners-data.js) ===")
+    shop_path = _resolve_agroverse_shop_path(manifest)
+    if shop_path is None:
+        print("  [skip] No agroverse_shop clone found (set agroverse_shop_path in manifest "
+              "or have a sibling ../agroverse_shop checkout). The operator must update "
+              "partner_locations.json + js/partners-data.js manually before merging.")
+        return
+    print(f"  Target: {shop_path}")
+    print(_update_partner_locations_json(shop_path, manifest, dry_run=dry_run))
+    print(_update_partners_data_js(shop_path, manifest, dry_run=dry_run))
+
+
+# ---------------------------------------------------------------------------
 # Step 13: Inventory movement loop
 # ---------------------------------------------------------------------------
 
@@ -493,46 +642,97 @@ def step14_run_syncs(*, dry_run: bool, market_research_path: Path | None = None)
 # Manual-step instructions (printed at end)
 # ---------------------------------------------------------------------------
 
-_MANUAL_STEPS_TEMPLATE = """
-=== Manual steps remaining (script-deferred MVP scope) ===
+_MANUAL_STEPS_TEMPLATE_RETAIL = """
+=== Manual steps remaining (HTML scaffolding + photos) ===
 
-After the script finishes, complete these in agroverse_shop:
+The script handled: ledger ([CONTRIBUTOR ADD] / Contributors col U /
+Agroverse Partners), website discovery surfaces (js/partners-data.js +
+partner_locations.json), and (when applicable) opening-order
+[INVENTORY MOVEMENT] events + inventory/velocity syncs.
 
-1. partners/{slug}/index.html
+Operator still owns:
+
+1. partners/{slug}/index.html — partner page narrative.
    Clone partners/lumin-earth-apothecary/index.html and find-replace:
      - lumin-earth-apothecary  →  {slug}
      - Lumin Earth Apothecary  →  {name}
      - Morro Bay / 875 Main St → {address}
-     - lat / lon coords         → operator-supplied
+     - lat / lon coords         → {lat} / {lon}
+     - Partner Type info-row    → "{type_label}"
    Then rewrite the about/mission paragraph (Lumin's is owner-specific).
 
-2. js/partners-data.js — append:
-     '{slug}': {{
-         name: '{name}',
-         slug: '{slug}',
-         lat: <operator-supplied>,
-         lon: <operator-supplied>,
-         location: '{location}',
-         description: '<2-sentence pitch>'
-     }}
+2. partners/index.html — alphabetical card insert.
+   Use Lumin Earth's card structure as template.
 
-3. partner_locations.json — append:
-     "{slug}": {{ "name": "{name}", "location": "{location}" }}
-
-4. wholesale/index.html — alphabetical insert:
+3. wholesale/index.html — alphabetical insert:
      <li><a href="../partners/{slug}/index.html">{name}</a><span class="city">{location_short}</span></li>
 
-5. partners/index.html — alphabetical insert (use Lumin Earth's card structure as template).
-
-6. cacao-journeys/pacific-west-coast-path/index.html — if your hero is .jpeg
+4. cacao-journeys/{{relevant-journey}}/index.html — if your hero is .jpeg
    (not .jpg), append '{slug}' to the imageExt conditional at the bottom.
 
-7. assets/partners/headers/{slug}-header.<ext> — upload hero.
+5. assets/partners/headers/{slug}-header.<ext> — upload hero.
    assets/partners/logos/{slug}-logo.<ext>     — upload logo.
 
-8. Open + merge PRs in agroverse_shop and agroverse-inventory.
+6. Open + merge PRs in agroverse_shop_beta and agroverse-inventory.
 
-The full reference doc (with worked example): agentic_ai_context/RETAILER_TECHNICAL_ONBOARDING.md
+The full reference doc (with worked example):
+  agentic_ai_context/RETAILER_TECHNICAL_ONBOARDING.md
+"""
+
+_MANUAL_STEPS_TEMPLATE_PROCESSING = """
+=== Manual steps remaining (HTML scaffolding + photos) ===
+
+The script handled: ledger ([CONTRIBUTOR ADD] / Contributors col U /
+Agroverse Partners) and website discovery surfaces (js/partners-data.js
++ partner_locations.json with `partner_role: 'processing'` tag).
+
+Operator still owns:
+
+1. partners/{slug}/index.html — partner page narrative.
+   Clone partners/shiok-kitchen-menlo-park/index.html (canonical processing
+   template) and find-replace:
+     - shiok-kitchen-menlo-park → {slug}
+     - Shiok Singapore Kitchen  → {name}
+     - 625 Oak Grove Ave        → {address}
+     - lat 37.4527, lon -122.1838 → {lat} / {lon}
+     - Partner Type info-row     → "{type_label}"
+     - "Off-hours commercial kitchen access" framing → role-specific copy
+   Rewrite the partnership-story section to capture how this partner
+   came on (origin story, owner background, deal terms — sans pricing
+   per the public/operational separation).
+
+2. partners/index.html — alphabetical card insert.
+   Use Shiok Kitchen's card structure as template (uses header image
+   in place of a separate logo).
+
+3. cacao-journeys/{{relevant-journey}}/index.html — processing partners
+   are typically EXCLUDED from journey lists (the journey is a retail
+   tour). Add '{slug}' to the exclusion filter alongside the existing
+   `the-ponderosa-slab-city` / `prism-percussions` / `shiok-kitchen-menlo-park`
+   exclusions on each journey page that filters by location.
+
+4. assets/partners/headers/{slug}-header.<ext> — upload hero.
+   (Logo optional for processing partners; the hub card can use the
+   header image directly.)
+
+5. Optional: photos under assets/partners/{slug}/ for in-body
+   partnership-story imagery (e.g., handshake / kitchen / facility shots).
+
+6. NOT applicable to processing partners: wholesale/index.html (that's
+   a where-to-buy list for retail venues only).
+
+7. Pricing artifact: append the rate quote + agreement screenshot URL
+   to "Agroverse Cacao Processing Cost" sheet
+   (1GE7PUq-…/edit?gid=603759787). Pricing is INTENTIONALLY off the
+   public partner page — it lives on the operational cost sheet.
+
+8. Open + merge PRs in agroverse_shop_beta and agroverse-inventory.
+
+The full reference doc (with worked example):
+  agentic_ai_context/RETAILER_TECHNICAL_ONBOARDING.md
+  agentic_ai_context/notes/claude_donation_mint_2026-04-30.md (visual
+    proof / notarization upload pattern, applicable to the processing
+    cost agreement screenshot)
 """
 
 
@@ -548,27 +748,50 @@ def run(manifest: Manifest, *, dry_run: bool, verbose: bool) -> None:
     print(f"location:    {manifest.location}")
     print(f"type:        {manifest.partner_type}")
 
-    client = EdgarClient.from_env(generation_source="dao_client/onboard_retail_partner")
+    client = EdgarClient.from_env(generation_source="dao_client/onboard_partner")
     step1_contributor_add(client, manifest, dry_run=dry_run, verbose=verbose)
     step2_set_mailing_address(manifest, dry_run=dry_run)
     step3_append_partners_row(manifest, dry_run=dry_run)
-    step13_submit_movements(client, manifest, dry_run=dry_run)
+    step5_update_listings(manifest, dry_run=dry_run)
+    if manifest.role == "retail":
+        step13_submit_movements(client, manifest, dry_run=dry_run)
+    elif manifest.opening_order:
+        # A processing manifest with an opening_order is unusual but valid —
+        # e.g. an initial inbound shipment of cacao nibs to Dennis. Run it
+        # but flag the unusual shape.
+        print("\n=== Step 13 — opening_order on a processing role (unusual but supported) ===")
+        step13_submit_movements(client, manifest, dry_run=dry_run)
     if manifest.run_syncs:
         step14_run_syncs(dry_run=dry_run)
 
     location_short = ", ".join(p.strip() for p in manifest.location.split(",")[:2])
-    print(_MANUAL_STEPS_TEMPLATE.format(
+    template = (_MANUAL_STEPS_TEMPLATE_PROCESSING
+                if manifest.role == "processing"
+                else _MANUAL_STEPS_TEMPLATE_RETAIL)
+    print(template.format(
         slug=manifest.partner_id,
         name=manifest.partner_name,
         location=manifest.location,
         location_short=location_short,
         address=manifest.address,
+        lat=manifest.lat if manifest.lat is not None else "<operator-supplied>",
+        lon=manifest.lon if manifest.lon is not None else "<operator-supplied>",
+        type_label=manifest.effective_partner_type_label,
     ))
 
 
 def main(argv: Iterable[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description="Onboard a retail partner end-to-end (MVP scope).")
+    p = argparse.ArgumentParser(
+        description="Onboard a partner end-to-end (retail or processing role)."
+    )
     p.add_argument("--manifest", type=Path, required=True, help="Path to YAML manifest.")
+    p.add_argument(
+        "--role",
+        choices=sorted(VALID_ROLES),
+        default=None,
+        help="Override the manifest's role field (retail | processing). "
+             "If omitted, the manifest's value is used (default: retail).",
+    )
     g = p.add_mutually_exclusive_group()
     g.add_argument("--dry-run", action="store_true", default=True,
                    help="Print intended actions without side effects (default).")
@@ -580,6 +803,8 @@ def main(argv: Iterable[str] | None = None) -> int:
     if not args.manifest.is_file():
         raise SystemExit(f"Manifest not found: {args.manifest}")
     manifest = load_manifest(args.manifest)
+    if args.role:  # CLI override wins over manifest
+        manifest.role = args.role
     run(manifest, dry_run=not args.execute, verbose=args.verbose)
     return 0
 
