@@ -175,8 +175,8 @@ Classification analogue: *1TDG For every 1 USD of liquidity injected*. Use **`--
 | `truesight_dao_client/modules/notarize.py` | `truesight-dao-notarize` | `[NOTARIZATION EVENT]` | `notarize.html` |
 | `truesight_dao_client/modules/register_farm.py` | `truesight-dao-register-farm` | `[FARM REGISTRATION]` | `register_farm.html` |
 | `truesight_dao_client/modules/repackaging_planner.py` | `truesight-dao-repackaging-planner` | `[REPACKAGING BATCH EVENT]` | `repackaging_planner.html` |
-| `truesight_dao_client/modules/report_capital_injection.py` | `truesight-dao-report-capital-injection` | `[CAPITAL INJECTION EVENT]` | `report_capital_injection.html` |
-| `truesight_dao_client/modules/report_contribution.py` | `truesight-dao-report-contribution` | `[CONTRIBUTION EVENT]` | `report_contribution.html` |
+| `truesight_dao_client/modules/report_capital_injection.py` | `truesight-dao-report-capital-injection` | `[CAPITAL INJECTION EVENT]` — **external investors wiring into AGL contracts only** | `report_capital_injection.html` |
+| `truesight_dao_client/modules/report_contribution.py` | `truesight-dao-report-contribution` | `[CONTRIBUTION EVENT]` — time or out-of-pocket expenses | `report_contribution.html` |
 | `truesight_dao_client/modules/report_ai_agent_contribution.py` | `truesight-dao-report-ai-agent-contribution` | `[CONTRIBUTION EVENT]` (AI agent — **PR URLs required**) | *Convention:* [`agentic_ai_context/DAO_CLIENT_AI_AGENT_CONTRIBUTIONS.md`](https://github.com/TrueSightDAO/agentic_ai_context/blob/main/DAO_CLIENT_AI_AGENT_CONTRIBUTIONS.md) |
 | `truesight_dao_client/modules/report_dapp_permission_change.py` | `truesight-dao-report-dapp-permission-change` | `[DAPP PERMISSION CHANGE EVENT]` (governor-only — edits `permissions.json` on `treasury-cache`) | *Spec:* [`agentic_ai_context/DAPP_PERMISSION_CHANGE_FLOW.md`](https://github.com/TrueSightDAO/agentic_ai_context/blob/main/DAPP_PERMISSION_CHANGE_FLOW.md) |
 | `truesight_dao_client/modules/report_dao_expenses.py` | `truesight-dao-report-dao-expenses` | `[DAO Inventory Expense Event]` | `report_dao_expenses.html` |
