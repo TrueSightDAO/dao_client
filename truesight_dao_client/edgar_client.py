@@ -262,6 +262,7 @@ def build_event_cli(
     event_name: str,
     canonical_labels: list[str] | None = None,
     dapp_page: str | None = None,
+    validators: dict[str, callable] | None = None,
 ):
     """Returns a `main()` entry point that:
       1. Accepts repeated `--attr "Label=Value"` args.
@@ -331,6 +332,13 @@ def build_event_cli(
 
         if not attrs:
             parser.error("At least one attribute is required (use --attr LABEL=VALUE or a named flag).")
+
+        for lbl, val in attrs:
+            if validators and lbl in validators:
+                try:
+                    validators[lbl](val)
+                except ValueError as exc:
+                    parser.error(str(exc))
 
         client = EdgarClient.from_env()
         if args.generation_source:
