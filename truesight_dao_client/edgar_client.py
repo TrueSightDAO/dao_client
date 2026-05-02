@@ -263,6 +263,7 @@ def build_event_cli(
     canonical_labels: list[str] | None = None,
     dapp_page: str | None = None,
     validators: dict[str, callable] | None = None,
+    normalizers: dict[str, callable] | None = None,
 ):
     """Returns a `main()` entry point that:
       1. Accepts repeated `--attr "Label=Value"` args.
@@ -333,23 +334,27 @@ def build_event_cli(
         if not attrs:
             parser.error("At least one attribute is required (use --attr LABEL=VALUE or a named flag).")
 
+        normalized_attrs: list[tuple[str, str]] = []
         for lbl, val in attrs:
             if validators and lbl in validators:
                 try:
                     validators[lbl](val)
                 except ValueError as exc:
                     parser.error(str(exc))
+            if normalizers and lbl in normalizers:
+                val = normalizers[lbl](val)
+            normalized_attrs.append((lbl, val))
 
         client = EdgarClient.from_env()
         if args.generation_source:
             client.generation_source = args.generation_source
 
         if args.dry_run:
-            payload, txn_id, share_text = client.sign(event_name, attrs)
+            payload, txn_id, share_text = client.sign(event_name, normalized_attrs)
             print(share_text)
             return 0
 
-        resp = client.submit(event_name, attrs)
+        resp = client.submit(event_name, normalized_attrs)
         print(f"HTTP {resp.status_code}")
         try:
             data = resp.json()
