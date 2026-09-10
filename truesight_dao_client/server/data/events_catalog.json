@@ -667,6 +667,7 @@
         "Location",
         "Latitude",
         "Longitude",
+        "Plot ID",
         "Species",
         "Planter",
         "Planting Time",

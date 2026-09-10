@@ -12,7 +12,7 @@ from ..edgar_client import build_event_cli
 
 main = build_event_cli(
     event_name='TREE PLANTING EVENT',
-    canonical_labels=['Latitude', 'Longitude', 'Species', 'Planting Time', 'Photo URL', 'Submission Source'],
+    canonical_labels=['Latitude', 'Longitude', 'Plot ID', 'Species', 'Planting Time', 'Photo URL', 'Submission Source'],
     dapp_page='report_tree_planting.html',
 )
 
