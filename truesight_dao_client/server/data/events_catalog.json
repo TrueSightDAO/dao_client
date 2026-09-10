@@ -659,7 +659,7 @@
     },
     "TREE PLANTING EVENT": {
       "category": "Other",
-      "description": "Record a tree planting with photo and location. CONTRACT: send BOTH the canonical Location (e.g. -3.094431, -52.095225; decimal, S/W negative - satisfies Edgar validation) AND Latitude/Longitude decimal fields (the GAS parser fills the SunMint Tree Planting tab lat/lng columns from these lines). Missing Location => validator rejects; missing Latitude/Longitude => parser writes blank lat/lng. Species strings are not standardized ('Cacau - Hybrid' pt vs 'Cacao' en) - use the exact string the farm lead specifies. See agentic_ai_context/SUNMINT_TREE_PHOTO_PROCESSING.md section 7.",
+      "description": "Record a tree planting with photo and location. CONTRACT: send BOTH the canonical Location (e.g. -3.094431, -52.095225; decimal, S/W negative - satisfies Edgar validation) AND Latitude/Longitude decimal fields (the GAS parser fills the SunMint Tree Planting tab lat/lng columns from these lines). Missing Location => validator rejects; missing Latitude/Longitude => parser writes blank lat/lng and the row is auto-INVALID. A Photo URL is REQUIRED: no photo => the planting cannot be verified => reject (do not submit). Species strings are not standardized ('Cacau - Hybrid' pt vs 'Cacao' en) - use the exact string the farm lead specifies. See agentic_ai_context/SUNMINT_TREE_PHOTO_PROCESSING.md section 7.",
       "canonical_labels": [
         "Tree Count",
         "Location",
@@ -676,7 +676,8 @@
         "Tree Count",
         "Location",
         "Latitude",
-        "Longitude"
+        "Longitude",
+        "Photo URL"
       ],
       "dapp_page": "report_tree_planting.html"
     },
