@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "description": "Canonical DAO event catalog — single source of truth for event types, labels, and validation. Served by Edgar at GET /events-catalog. Used by Sophia autopilot and server-side dispatch.",
   "events": {
     "ASSET RECEIPT EVENT": {
@@ -274,10 +274,11 @@
     },
     "FARM BOUNDARY EVIDENCE EVENT": {
       "category": "Other",
-      "description": "Farmer/agent-submitted geotagged boundary evidence (photos/videos of plot boundary markers). GPS embedded in the images is extracted (exiftool); the convex hull forms the approx boundary polygon; the backend creates/updates the farm + plot record (SunMint Farms sheet -> plots/index.geojson -> impact map). CONTRACT: omit Plot ID when unknown - the backend auto-assigns PL-###; NEVER send an empty '- Plot ID:' line (the GAS parser regex swallows the newline and captures the next label - fixed tokenomics #458). Join Media URLs with '; '. Include the live UI fields (Is New Farm, Media Count, Captured At, Device GPS) plus Extracted GPS and Area Hectares when available. See agentic_ai_context/SUNMINT_TREE_PHOTO_PROCESSING.md section 6.",
+      "description": "Farmer/agent-submitted geotagged boundary evidence (photos/videos of plot boundary markers). GPS embedded in the images is extracted (exiftool); the convex hull forms the approx boundary polygon; the backend creates/updates the farm + plot record (SunMint Farms sheet -> plots/index.geojson -> impact map). CONTRACT: omit Plot ID when unknown - the backend auto-assigns PL-###; NEVER send an empty '- Plot ID:' line (the GAS parser regex swallows the newline and captures the next label - fixed tokenomics #458). Join Media URLs with '; '. Plot Type is REQUIRED (single controlled-vocabulary column: restoration|mature|maturing|enrichment|research|nursery|infrastructure; blank = unclassified and only valid for legacy rows). Include the live UI fields (Is New Farm, Media Count, Captured At, Device GPS) plus Extracted GPS and Area Hectares when available. See agentic_ai_context/SUNMINT_TREE_PHOTO_PROCESSING.md section 6.",
       "canonical_labels": [
         "Farm Name",
         "Is New Farm",
+        "Plot Type",
         "Boundary Type",
         "Media URLs",
         "Media Count",
@@ -289,7 +290,8 @@
       ],
       "required_fields": [
         "Farm Name",
-        "Media URLs"
+        "Media URLs",
+        "Plot Type"
       ],
       "dapp_page": "limites-da-fazenda/index.html"
     },
